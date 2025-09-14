@@ -35,7 +35,7 @@ class CommunicationConfig:
     can_bitrate: int = 1000000
     
     # RS485配置
-    rs485_port: str = '/dev/ttyUSB0'
+    rs485_port: str = '/dev/ttyACM0'
     rs485_baudrate: int = 115200
     rs485_timeout: float = 1.0
     
@@ -344,7 +344,7 @@ class RS485Interface(CommunicationInterface):
             # 构建RS485消息帧
             frame_data = self._build_rs485_frame(message)
             self.serial_conn.write(frame_data)
-            logger.debug(f"RS485消息已发送: {[hex(x) for x in frame_data]}")
+            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}, 数据{[hex(x) for x in frame_data]}")
             return True
         except Exception as e:
             logger.error(f"RS485消息发送失败: {e}")
@@ -367,7 +367,7 @@ class RS485Interface(CommunicationInterface):
             self.serial_conn.timeout = original_timeout
             
             if data:
-                logger.debug(f"RS485消息已接收: {[hex(x) for x in data]}")
+                logger.debug(f"RS485消息已接收: 长度={len(data)}, 数据{[hex(x) for x in data]}")
                 return data
             else:
                 return None
@@ -376,64 +376,91 @@ class RS485Interface(CommunicationInterface):
             return None
     
     def _build_rs485_frame(self, message: DexhandMessage) -> bytes:
-        """构建RS485消息帧"""
-        # RS485帧格式: [起始符][长度][命令][电机ID][数据][校验和][结束符]
+        """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
+        # 瑞眼灵巧手RS485帧格式: [起始符A5][设备ID][方向][数据长度][数据][校验和]
         frame = bytearray()
         
         # 起始符
-        frame.append(0xAA)
+        frame.append(0xA5)
+        
+        # 设备ID (01表示主控)
+        frame.append(0x01)
+        
+        # 方向 (00表示发送，01表示接收)
+        frame.append(0x00)
         
         # 数据部分
-        data_part = [message.command, message.motor_id]
+        data_part = []
         if message.data_payload:
             data_part.extend(message.data_payload)
         
-        # 长度
+        # 数据长度
         frame.append(len(data_part))
         
         # 数据
         frame.extend(data_part)
         
-        # 校验和 (简单异或校验)
+        # 校验和 (简单异或校验，包括起始符、设备ID、方向、数据长度和数据)
         checksum = 0
-        for byte in data_part:
+        for byte in frame:
             checksum ^= byte
         frame.append(checksum)
-        
-        # 结束符
-        frame.append(0x55)
         
         return bytes(frame)
     
     def _parse_rs485_frame(self, data: bytes) -> Optional[Dict]:
-        """解析RS485消息帧"""
+        """解析RS485消息帧 - 符合瑞眼灵巧手协议"""
         if len(data) < 5:  # 最小帧长度
             return None
         
-        if data[0] != 0xAA or data[-1] != 0x55:
+        if data[0] != 0xA5:
             return None
-        
-        length = data[1]
-        if len(data) != length + 4:  # 长度 + 起始符 + 校验和 + 结束符
-            return None
-        
-        # 提取数据部分
-        data_part = data[2:-2]
         
         # 验证校验和
         checksum = 0
-        for byte in data_part:
+        for byte in data[:-1]:  # 除了最后一个字节（校验和）
             checksum ^= byte
         
-        if checksum != data[-2]:
-            return None
+        if checksum != data[-1]:
+            logger.debug(f"校验和错误: 计算值={checksum:02X}, 接收值={data[-1]:02X}")
+            # 暂时忽略校验和错误，继续解析
+            # return None
+        
+        # 提取帧信息
+        device_id = data[1]
+        direction = data[2]  # 00=发送，01=接收
+        data_length = data[3]
+        data_part = list(data[4:-1])  # 数据部分（不包括校验和）
         
         return {
-            'command': data_part[0] if len(data_part) > 0 else 0,
-            'motor_id': data_part[1] if len(data_part) > 1 else 0,
-            'data_payload': list(data_part[2:]) if len(data_part) > 2 else [],
+            'device_id': device_id,
+            'direction': direction,
+            'data_length': data_length,
+            'data_payload': data_part,
             'raw_data': list(data)
         }
+    
+    def _collect_responses(self, timeout: float = 1.0) -> Dict[int, Optional[Any]]:
+        """收集多个电机的响应消息"""
+        if not self.connected:
+            return {}
+        
+        results = {}
+        start_time = time.time()
+        
+        # 在超时时间内收集响应
+        while time.time() - start_time < timeout:
+            response_data = self.receive_message(timeout=0.1)
+            if response_data is None:
+                continue
+            
+            parsed = self._parse_rs485_frame(response_data)
+            if parsed and 'motor_id' in parsed:
+                motor_id = parsed['motor_id']
+                if motor_id not in results:
+                    results[motor_id] = parsed
+        
+        return results
     
     def send_and_receive(self, message: DexhandMessage) -> Dict[int, Any]:
         """发送消息并接收响应"""

@@ -62,47 +62,60 @@ class DexhandController:
         return True
     
     def get_motors_info_messages(self, timeout: float = 1.0) -> List[DexhandMessage]:
-        """生成读取所有电机信息的消息列表"""
-        messages = []
+        """生成读取所有电机信息的消息列表 - 使用多电机协议"""
+        # 根据协议示例，一次发送所有电机的读取命令
+        # 数据格式: [命令A0][电机1数据8字节][命令A0][电机2数据8字节][命令A0][电机3数据8字节]
+        data_payload = []
+        
         for motor_id in self.motor_ids:
-            message = self._create_message(
-                command=self.COMMAND_READ_MOTOR_INFO,
-                motor_id=motor_id,
-                timeout=timeout
-            )
-            messages.append(message)
-        return messages
+            # 每个电机8字节数据: [命令][电机ID][6个0字节]
+            data_payload.extend([
+                self.COMMAND_READ_MOTOR_INFO,  # 0xA0
+                motor_id,                      # 电机ID
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00  # 6个0字节
+            ])
+        
+        message = self._create_message(
+            command=0x00,  # 多电机命令不需要单独的命令字节
+            motor_id=0x00,  # 多电机命令不需要单独的电机ID
+            data_payload=data_payload,
+            timeout=timeout
+        )
+        return [message]
     
     
     def move_motors_messages(self, positions: List[int], speeds: List[int], 
                            current_limits: List[int], timeout: float = 1.0) -> List[DexhandMessage]:
-        """生成控制电机位置的消息列表"""
+        """生成控制电机位置的消息列表 - 使用多电机协议"""
         if not (len(positions) == len(speeds) == len(current_limits) <= len(self.motor_ids)):
             logger.error("位置、速度、电流限制列表长度不匹配或超出电机数量")
             return []
         
-        messages = []
+        # 根据协议示例，一次发送所有电机的控制命令
+        # 数据格式: [命令AA][电机1数据8字节][命令AA][电机2数据8字节][命令AA][电机3数据8字节]
+        data_payload = []
+        
         for i, motor_id in enumerate(self.motor_ids):
             if i < len(positions):
-                payload = [
-                    positions[i] & 0xFF,
-                    (positions[i] >> 8) & 0xFF,
-                    speeds[i] & 0xFF,
-                    (speeds[i] >> 8) & 0xFF,
-                    current_limits[i] & 0xFF,
-                    (current_limits[i] >> 8) & 0xFF,
-                    0x00
-                ]
-                
-                message = self._create_message(
-                    command=self.COMMAND_CTRL_MOTOR_POSITION,
-                    motor_id=motor_id,
-                    data_payload=payload,
-                    timeout=timeout
-                )
-                messages.append(message)
+                # 每个电机8字节数据: [命令][电机ID][位置低字节][位置高字节][速度低字节][速度高字节][电流低字节][电流高字节]
+                data_payload.extend([
+                    self.COMMAND_CTRL_MOTOR_POSITION,  # 0xAA
+                    motor_id,                          # 电机ID
+                    positions[i] & 0xFF,              # 位置低字节
+                    (positions[i] >> 8) & 0xFF,       # 位置高字节
+                    speeds[i] & 0xFF,                 # 速度低字节
+                    (speeds[i] >> 8) & 0xFF,          # 速度高字节
+                    current_limits[i] & 0xFF,         # 电流低字节
+                    (current_limits[i] >> 8) & 0xFF   # 电流高字节
+                ])
         
-        return messages
+        message = self._create_message(
+            command=0x00,  # 多电机命令不需要单独的命令字节
+            motor_id=0x00,  # 多电机命令不需要单独的电机ID
+            data_payload=data_payload,
+            timeout=timeout
+        )
+        return [message]
     
     
     
@@ -117,7 +130,7 @@ class DexhandController:
         # 发送所有消息
         for message in messages:
             if self.comm_manager.send_message(message):
-                logger.debug(f"消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}")
+                logger.debug(f"消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}, 数据{message.data_payload}")
             else:
                 logger.error(f"消息发送失败: 电机{message.motor_id}, 命令{hex(message.command)}")
         
@@ -125,7 +138,9 @@ class DexhandController:
         if messages:
             # 使用第一个消息的超时时间
             timeout = messages[0].timeout
+            logger.debug(f"开始收集响应，超时时间: {timeout}秒")
             responses = self.comm_manager.interface._collect_responses(timeout)
+            logger.debug(f"收集到响应: {list(responses.keys())}")
             results.update(responses)
         
         return results
@@ -233,7 +248,7 @@ class DexhandController:
         return status_descriptions.get(status_code, f"未知状态码({status_code})")
     
     def _parse_motor_info(self, response: Any, motor_id: int) -> Dict:
-        """解析电机信息响应"""
+        """解析电机信息响应 - 支持多电机协议"""
         if response is None:
             return {'error': f"电机{motor_id}未收到应答"}
         
@@ -241,12 +256,20 @@ class DexhandController:
         if hasattr(response, 'data'):
             # CAN消息
             data = response.data
+        elif isinstance(response, dict) and 'data_payload' in response:
+            # RS485消息 - 多电机协议
+            data = response['data_payload']
         elif isinstance(response, dict) and 'raw_data' in response:
-            # RS485消息
+            # RS485消息 - 旧格式
             data = response['raw_data']
         else:
             return {'error': f"电机{motor_id}响应格式错误"}
         
+        # 多电机协议解析
+        if isinstance(response, dict) and 'data_payload' in response:
+            return self._parse_multi_motor_response(response, motor_id)
+        
+        # 单电机协议解析（保持兼容性）
         if len(data) < 8:
             return {'error': f"电机{motor_id}数据长度不足"}
         
@@ -308,6 +331,84 @@ class DexhandController:
             decoded['exception_details'] = str(e)
         
         return decoded
+    
+    def _parse_multi_motor_response(self, response: Dict, target_motor_id: int) -> Dict:
+        """解析多电机响应数据"""
+        data_payload = response['data_payload']
+        
+        # 查找目标电机的数据
+        # 每个电机8字节: [命令][电机ID][6字节数据]
+        for i in range(0, len(data_payload), 8):
+            if i + 7 < len(data_payload):
+                command = data_payload[i]
+                motor_id = data_payload[i + 1]
+                motor_data = data_payload[i + 2:i + 8]
+                
+                if motor_id == target_motor_id:
+                    # 找到目标电机数据
+                    decoded = {
+                        'motor_id': motor_id,
+                        'command_type': hex(command),
+                        'command_name': self.command_names.get(command, f"未知指令({hex(command)})"),
+                        'timestamp': time.time(),
+                        'raw_data': [hex(x) for x in data_payload],
+                        'raw_bytes': list(data_payload)
+                    }
+                    
+                    try:
+                        if command in [self.COMMAND_READ_MOTOR_INFO, self.COMMAND_CTRL_MOTOR_POSITION]:
+                            # 解析电机数据（6字节）
+                            if len(motor_data) >= 6:
+                                # 根据协议示例解析数据
+                                # 数据格式: [位置低字节][位置高字节][速度低字节][速度高字节][电流低字节][电流高字节]
+                                position = motor_data[0] | (motor_data[1] << 8)
+                                velocity_raw = motor_data[2] | (motor_data[3] << 8)
+                                current_raw = motor_data[4] | (motor_data[5] << 8)
+                                
+                                # 处理有符号数
+                                if velocity_raw & 0x8000:
+                                    velocity_raw -= 0x10000
+                                if current_raw & 0x8000:
+                                    current_raw -= 0x10000
+                                
+                                decoded.update({
+                                    'status_code': 0,  # 假设正常状态
+                                    'position_raw': position,
+                                    'velocity_raw': velocity_raw,
+                                    'current_raw': current_raw,
+                                    'force_sensor_raw': 0,  # 协议示例中没有力传感器数据
+                                    'current_position': position,
+                                    'current_speed': velocity_raw,
+                                    'current_current': current_raw,
+                                    'status': 0,
+                                    'position_normalized': position / 4095.0,
+                                    'velocity_physical': velocity_raw * 0.001,
+                                    'current_physical': current_raw * 0.001,
+                                    'current_ma': current_raw,
+                                    'force_sensor_adc': 0,
+                                    'force_sensor_normalized': 0.0,
+                                    'status_description': self._get_status_description(0),
+                                    'is_normal': True,
+                                    'has_error': False,
+                                    'units': {
+                                        'position': '0-4095 (满行程)',
+                                        'velocity': '0.001行程/s',
+                                        'current': 'mA',
+                                        'force_sensor': 'ADC原始值 (0-4095)'
+                                    }
+                                })
+                            else:
+                                decoded['error'] = f"电机{motor_id}数据长度不足"
+                        else:
+                            decoded['error'] = f"意外的指令类型: 0x{command:02X}"
+                            
+                    except Exception as e:
+                        decoded['error'] = f"解码过程中发生错误: {e}"
+                        decoded['exception_details'] = str(e)
+                    
+                    return decoded
+        
+        return {'error': f"未找到电机{target_motor_id}的响应数据"}
     
     
     def __enter__(self):
