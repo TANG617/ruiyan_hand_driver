@@ -37,7 +37,7 @@
 
 2. 构建工作空间：
    ```bash
-   cd /root/workspace
+   cd /path/to/your/workspace
    colcon build --packages-select ruiyan_hand_driver
    source install/setup.bash
    ```
@@ -55,7 +55,7 @@
 
 #### 方法1：使用启动脚本（推荐）
 ```bash
-cd /root/workspace/src/ruiyan_hand_driver/test
+cd /path/to/your/workspace/src/ruiyan_hand_driver/test
 chmod +x run_tests.sh
 ./run_tests.sh
 ```

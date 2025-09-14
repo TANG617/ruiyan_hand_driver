@@ -13,8 +13,14 @@ if [ -z "$ROS_DISTRO" ]; then
 fi
 
 # 设置工作空间环境
-if [ -f "/root/workspace/install/setup.bash" ]; then
-    source /root/workspace/install/setup.bash
+# 使用相对路径查找setup.bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
+echo "WORKSPACE_ROOT: $WORKSPACE_ROOT"
+INSTALL_SETUP="$WORKSPACE_ROOT/install/setup.bash"
+
+if [ -f "$INSTALL_SETUP" ]; then
+    source "$INSTALL_SETUP"
     echo "工作空间环境已设置"
 else
     echo "错误: 工作空间未构建"
@@ -54,15 +60,15 @@ while true; do
     case $choice in
         1)
             echo "运行简单测试..."
-            python3 /root/workspace/src/ruiyan_hand_driver/test/simple_test.py
+            python3 "$SCRIPT_DIR/simple_test.py"
             ;;
         2)
             echo "运行完整测试..."
-            python3 /root/workspace/src/ruiyan_hand_driver/test/test_ruiyan_hand_control.py
+            python3 "$SCRIPT_DIR/test_ruiyan_hand_control.py"
             ;;
         3)
             echo "运行交互式测试..."
-            python3 /root/workspace/src/ruiyan_hand_driver/test/interactive_test.py
+            python3 "$SCRIPT_DIR/interactive_test.py"
             ;;
         4)
             echo "启动手部控制节点..."

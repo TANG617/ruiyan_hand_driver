@@ -50,18 +50,18 @@ class SimpleRuiyanTest(Node):
         self.get_logger().info("1. 张开")
         open_angles = [0.0] * 6
         self.send_command(left_angles=open_angles, right_angles=open_angles)
-        time.sleep(2.0)
+        time.sleep(5.0)
         
         # 2. 握拳
         self.get_logger().info("2. 握拳")
         fist_angles = [90.0] * 6
         self.send_command(left_angles=fist_angles, right_angles=fist_angles)
-        time.sleep(2.0)
+        time.sleep(5.0)
         
         # 3. 回到张开
-        self.get_logger().info("3. 回到张开")
-        self.send_command(left_angles=open_angles, right_angles=open_angles)
-        time.sleep(1.0)
+        # self.get_logger().info("3. 回到张开")
+        # self.send_command(left_angles=open_angles, right_angles=open_angles)
+        # time.sleep(1.0)
         
         self.get_logger().info("快速测试完成！")
 

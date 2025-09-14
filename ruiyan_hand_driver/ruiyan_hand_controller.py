@@ -75,9 +75,10 @@ class DexhandController:
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00  # 6个0字节
             ])
         
+        # 使用第一个电机ID作为消息ID（用于RS485帧的ID字段）
         message = self._create_message(
-            command=0x00,  # 多电机命令不需要单独的命令字节
-            motor_id=0x00,  # 多电机命令不需要单独的电机ID
+            command=self.COMMAND_READ_MOTOR_INFO,  # 使用读取命令
+            motor_id=self.motor_ids[0],  # 使用第一个电机ID作为消息ID
             data_payload=data_payload,
             timeout=timeout
         )
@@ -91,13 +92,13 @@ class DexhandController:
             logger.error("位置、速度、电流限制列表长度不匹配或超出电机数量")
             return []
         
-        # 根据协议示例，一次发送所有电机的控制命令
-        # 数据格式: [命令AA][电机1数据8字节][命令AA][电机2数据8字节][命令AA][电机3数据8字节]
+        # 根据测试命令格式，构建多电机控制数据
+        # 数据格式: [命令AA][电机ID][位置低字节][位置高字节][速度低字节][速度高字节][电流低字节][电流高字节] (每个电机8字节)
         data_payload = []
         
         for i, motor_id in enumerate(self.motor_ids):
             if i < len(positions):
-                # 每个电机8字节数据: [命令][电机ID][位置低字节][位置高字节][速度低字节][速度高字节][电流低字节][电流高字节]
+                # 每个电机8字节数据: [命令AA][电机ID][位置低字节][位置高字节][速度低字节][速度高字节][电流低字节][电流高字节]
                 data_payload.extend([
                     self.COMMAND_CTRL_MOTOR_POSITION,  # 0xAA
                     motor_id,                          # 电机ID
@@ -109,9 +110,10 @@ class DexhandController:
                     (current_limits[i] >> 8) & 0xFF   # 电流高字节
                 ])
         
+        # 使用第一个电机ID作为消息ID（用于RS485帧的ID字段）
         message = self._create_message(
-            command=0x00,  # 多电机命令不需要单独的命令字节
-            motor_id=0x00,  # 多电机命令不需要单独的电机ID
+            command=self.COMMAND_CTRL_MOTOR_POSITION,  # 使用控制命令
+            motor_id=self.motor_ids[0],  # 使用第一个电机ID作为消息ID
             data_payload=data_payload,
             timeout=timeout
         )
@@ -160,6 +162,28 @@ class DexhandController:
         
         return results
     
+    def get_motors_info_simple(self, timeout: float = 0.1) -> Dict[int, Dict]:
+        """简单获取电机信息 - 逐个电机读取"""
+        results = {}
+        
+        for motor_id in self.motor_ids:
+            # 为每个电机创建单独的消息
+            message = self._create_message(
+                command=self.COMMAND_READ_MOTOR_INFO,
+                motor_id=motor_id,
+                data_payload=[motor_id, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+                timeout=timeout
+            )
+            
+            # 发送并接收响应
+            response = self.comm_manager.send_and_receive(message)
+            if motor_id in response and response[motor_id] is not None:
+                results[motor_id] = self._parse_motor_info(response[motor_id], motor_id)
+            else:
+                results[motor_id] = {'error': f"电机{motor_id}无响应"}
+        
+        return results
+    
     def move_motors(self, positions: List[int], speeds: List[int], 
                    current_limits: List[int], timeout: float = 1.0) -> Dict[int, Dict]:
         """控制多个电机位置"""
@@ -174,6 +198,22 @@ class DexhandController:
             results[motor_id] = self._parse_motor_info(response, motor_id)
         
         return results
+    
+    def move_motors_fast(self, positions: List[int], speeds: List[int], 
+                        current_limits: List[int]) -> bool:
+        """快速控制多个电机位置 - 仅发送命令，不等待响应"""
+        messages = self.move_motors_messages(positions, speeds, current_limits, timeout=0.01)
+        if not messages:
+            return False
+        
+        # 仅发送消息，不等待响应
+        success = True
+        for message in messages:
+            if not self.comm_manager.send_message(message):
+                success = False
+                logger.error(f"快速发送消息失败: 电机{message.motor_id}, 命令{hex(message.command)}")
+        
+        return success
     
     def clear_motors_error(self, timeout: float = 1.0) -> bool:
         """清除所有电机故障，向ID=0广播清除故障命令"""
@@ -336,15 +376,26 @@ class DexhandController:
         """解析多电机响应数据"""
         data_payload = response['data_payload']
         
+        logger.debug(f"解析多电机响应: 目标电机ID={target_motor_id}, 数据长度={len(data_payload)}")
+        logger.debug(f"响应数据: {[hex(x) for x in data_payload]}")
+        
         # 查找目标电机的数据
         # 每个电机8字节: [命令][电机ID][6字节数据]
+        # 如果设备返回的电机ID都是0，我们根据位置来推断电机ID
+        motor_index = 0
         for i in range(0, len(data_payload), 8):
             if i + 7 < len(data_payload):
                 command = data_payload[i]
                 motor_id = data_payload[i + 1]
                 motor_data = data_payload[i + 2:i + 8]
                 
-                if motor_id == target_motor_id:
+                # 根据位置推断电机ID（从1开始）
+                inferred_motor_id = motor_index + 1
+                
+                logger.debug(f"检查电机数据: 位置{i}, 命令={hex(command)}, 电机ID={motor_id}, 推断ID={inferred_motor_id}, 数据={[hex(x) for x in motor_data]}")
+                
+                # 匹配目标电机ID（使用推断的ID）
+                if inferred_motor_id == target_motor_id:
                     # 找到目标电机数据
                     decoded = {
                         'motor_id': motor_id,
@@ -407,6 +458,8 @@ class DexhandController:
                         decoded['exception_details'] = str(e)
                     
                     return decoded
+                
+                motor_index += 1
         
         return {'error': f"未找到电机{target_motor_id}的响应数据"}
     

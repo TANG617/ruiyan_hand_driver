@@ -9,8 +9,15 @@ import os
 import time
 import serial
 
-# 添加工作空间路径
-sys.path.append('/root/workspace/install/ruiyan_hand_driver/lib/python3.10/site-packages')
+# 添加项目路径 - 使用相对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.join(current_dir, '..', '..')
+sys.path.insert(0, project_root)
+
+# 尝试添加安装路径（如果存在）
+install_path = os.path.join(project_root, '..', '..', 'install', 'ruiyan_hand_driver', 'lib', 'python3.10', 'site-packages')
+if os.path.exists(install_path):
+    sys.path.append(install_path)
 
 from ruiyan_hand_driver.communication_interface import DexhandMessage, RS485Interface, CommunicationConfig
 from ruiyan_hand_driver.ruiyan_hand_controller import DexhandController

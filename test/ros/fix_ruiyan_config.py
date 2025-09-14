@@ -125,7 +125,9 @@ def generate_launch_description():
 '''
         
         # 写入launch文件
-        launch_file = '/root/workspace/src/ruiyan_hand_driver/launch/ruiyan_hands_working.launch.py'
+        # 使用相对路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        launch_file = os.path.join(current_dir, '..', '..', 'launch', 'ruiyan_hands_working.launch.py')
         with open(launch_file, 'w') as f:
             f.write(launch_content)
         

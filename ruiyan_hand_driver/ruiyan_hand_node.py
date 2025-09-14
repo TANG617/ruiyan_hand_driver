@@ -38,6 +38,11 @@ class RuiyanHandController:
         self.set_angles_buffer = [0, 0, 0, 0, 0, 0]  # 目标角度缓冲区
         self.joint_states_buffer = [0, 0, 0, 0, 0, 0]  # 当前状态缓冲区
         
+        # 频率监控
+        self.control_loop_count = 0
+        self.status_loop_count = 0
+        self.last_freq_check_time = time.time()
+        
         # 初始化关节状态消息
         self.current_joint_states = JointState()
         self.current_joint_states.name = [f'{hand_type}_joint_{i}' for i in motor_ids]
@@ -129,9 +134,14 @@ class RuiyanHandNode(Node):
         # 创建ROS2话题
         self._create_topics()
         
+        # 初始化频率监控变量
+        self.last_freq_check_time = time.time()
+        
         # 创建定时器
         self.create_timer(1.0 / control_rate, self.control_loop)  # 100Hz控制循环
+        self.create_timer(1.0 / 5.0, self.status_loop)  # 5Hz状态读取循环（降低频率）
         self.create_timer(1.0, self.check_connection_status)  # 1Hz连接检查
+        self.create_timer(5.0, self.print_frequency_stats)  # 5Hz频率统计
         
         self.logger.info("瑞眼灵巧手控制节点初始化完成")
     
@@ -194,21 +204,39 @@ class RuiyanHandNode(Node):
             self.logger.error(f"设置{hand_controller.hand_type}手关节角度时发生错误: {e}")
     
     def control_loop(self):
-        """100Hz控制循环 - 发送move_motors命令并更新状态"""
+        """100Hz控制循环 - 仅发送控制命令，不等待响应"""
         try:
             # 控制左手
             if self.left_hand:
-                self._control_single_hand(self.left_hand, self.left_joint_states_publisher)
+                self._control_single_hand_fast(self.left_hand)
+                self.left_hand.control_loop_count += 1
             
             # 控制右手
             if self.right_hand:
-                self._control_single_hand(self.right_hand, self.right_joint_states_publisher)
+                self._control_single_hand_fast(self.right_hand)
+                self.right_hand.control_loop_count += 1
             
         except Exception as e:
             self.logger.error(f"控制循环中发生错误: {e}")
     
-    def _control_single_hand(self, hand_controller: RuiyanHandController, publisher):
-        """控制单个手"""
+    def status_loop(self):
+        """10Hz状态读取循环 - 读取电机状态并发布"""
+        try:
+            # 读取左手状态
+            if self.left_hand:
+                self._read_hand_status(self.left_hand, self.left_joint_states_publisher)
+                self.left_hand.status_loop_count += 1
+            
+            # 读取右手状态
+            if self.right_hand:
+                self._read_hand_status(self.right_hand, self.right_joint_states_publisher)
+                self.right_hand.status_loop_count += 1
+            
+        except Exception as e:
+            self.logger.error(f"状态读取循环中发生错误: {e}")
+    
+    def _control_single_hand_fast(self, hand_controller: RuiyanHandController):
+        """快速控制单个手 - 仅发送命令，不等待响应"""
         try:
             if not hand_controller.controller.is_connected():
                 return
@@ -230,10 +258,22 @@ class RuiyanHandNode(Node):
                 # 设置电流限制 (默认1000mA)
                 current_limits.append(1000)
             
-            # 发送控制命令
-            self.logger.debug(f"发送{hand_controller.hand_type}手控制命令 - 位置: {positions}, 速度: {speeds}, 电流限制: {current_limits}")
-            results = hand_controller.controller.move_motors(positions, speeds, current_limits)
-            self.logger.debug(f"收到{hand_controller.hand_type}手电机响应: {results}")
+            # 快速发送控制命令 - 不等待响应
+            success = hand_controller.controller.move_motors_fast(positions, speeds, current_limits)
+            if not success:
+                self.logger.warn(f"{hand_controller.hand_type}手快速控制命令发送失败")
+            
+        except Exception as e:
+            self.logger.error(f"{hand_controller.hand_type}手快速控制循环中发生错误: {e}")
+    
+    def _read_hand_status(self, hand_controller: RuiyanHandController, publisher):
+        """读取手部状态并发布"""
+        try:
+            if not hand_controller.controller.is_connected():
+                return
+            
+            # 读取电机信息 - 使用简单方法逐个读取
+            results = hand_controller.controller.get_motors_info_simple(timeout=0.02)  # 20ms超时
             
             # 更新joint_states_buffer和发布状态
             hand_controller.current_joint_states.header.stamp = self.get_clock().now().to_msg()
@@ -262,15 +302,8 @@ class RuiyanHandNode(Node):
             # 发布关节状态
             publisher.publish(hand_controller.current_joint_states)
             
-            # 打印缓冲区状态
-            self.logger.debug(f"{hand_controller.hand_type}手目标角度缓冲区: {[f'{angle:.2f}' for angle in hand_controller.set_angles_buffer]}")
-            self.logger.debug(f"{hand_controller.hand_type}手当前关节状态缓冲区: {[f'{angle:.2f}' for angle in hand_controller.joint_states_buffer]}")
-            self.logger.debug(f"{hand_controller.hand_type}手电机位置值: {positions}")
-            self.logger.debug(f"{hand_controller.hand_type}手电机速度值: {speeds}")
-            self.logger.debug(f"{hand_controller.hand_type}手电机电流限制: {current_limits}")
-            
         except Exception as e:
-            self.logger.error(f"{hand_controller.hand_type}手控制循环中发生错误: {e}")
+            self.logger.error(f"{hand_controller.hand_type}手状态读取中发生错误: {e}")
     
     def check_connection_status(self):
         """检查连接状态"""
@@ -301,6 +334,37 @@ class RuiyanHandNode(Node):
                     
         except Exception as e:
             self.logger.error(f"检查连接状态时发生错误: {e}")
+    
+    def print_frequency_stats(self):
+        """打印频率统计信息"""
+        try:
+            current_time = time.time()
+            time_diff = current_time - self.last_freq_check_time
+            
+            if time_diff > 0:
+                # 计算左手频率
+                if self.left_hand:
+                    left_control_freq = self.left_hand.control_loop_count / time_diff
+                    left_status_freq = self.left_hand.status_loop_count / time_diff
+                    self.logger.info(f"左手频率统计 - 控制循环: {left_control_freq:.2f}Hz, 状态读取: {left_status_freq:.2f}Hz")
+                    # 重置计数器
+                    self.left_hand.control_loop_count = 0
+                    self.left_hand.status_loop_count = 0
+                
+                # 计算右手频率
+                if self.right_hand:
+                    right_control_freq = self.right_hand.control_loop_count / time_diff
+                    right_status_freq = self.right_hand.status_loop_count / time_diff
+                    self.logger.info(f"右手频率统计 - 控制循环: {right_control_freq:.2f}Hz, 状态读取: {right_status_freq:.2f}Hz")
+                    # 重置计数器
+                    self.right_hand.control_loop_count = 0
+                    self.right_hand.status_loop_count = 0
+            
+            # 重置时间
+            self.last_freq_check_time = current_time
+            
+        except Exception as e:
+            self.logger.error(f"打印频率统计时发生错误: {e}")
     
     def shutdown(self):
         """关闭节点"""

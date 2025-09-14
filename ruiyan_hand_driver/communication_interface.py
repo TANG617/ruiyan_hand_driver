@@ -344,7 +344,9 @@ class RS485Interface(CommunicationInterface):
             # 构建RS485消息帧
             frame_data = self._build_rs485_frame(message)
             self.serial_conn.write(frame_data)
-            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}, 数据{[hex(x) for x in frame_data]}")
+            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}")
+            logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in frame_data])}")
+            logger.debug(f"帧长度: {len(frame_data)} 字节")
             return True
         except Exception as e:
             logger.error(f"RS485消息发送失败: {e}")
@@ -377,64 +379,64 @@ class RS485Interface(CommunicationInterface):
     
     def _build_rs485_frame(self, message: DexhandMessage) -> bytes:
         """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
-        # 瑞眼灵巧手RS485帧格式: [起始符A5][设备ID][方向][数据长度][数据][校验和]
+        # 正确的RS485帧格式: [header 0xA5][id 2字节][len 1字节][data n字节][check 1字节]
         frame = bytearray()
         
-        # 起始符
+        # 起始符 (header)
         frame.append(0xA5)
         
-        # 设备ID (01表示主控)
-        frame.append(0x01)
-        
-        # 方向 (00表示发送，01表示接收)
-        frame.append(0x00)
+        # ID (2字节) - 对应CAN/CANFD原生ID，使用电机ID
+        motor_id = message.motor_id if message.motor_id != 0 else 1  # 如果为0则使用1
+        frame.append(motor_id & 0xFF)        # ID低字节
+        frame.append((motor_id >> 8) & 0xFF) # ID高字节
         
         # 数据部分
         data_part = []
         if message.data_payload:
             data_part.extend(message.data_payload)
         
-        # 数据长度
+        # 数据长度 (len)
         frame.append(len(data_part))
         
-        # 数据
+        # 数据 (data[])
         frame.extend(data_part)
         
-        # 校验和 (简单异或校验，包括起始符、设备ID、方向、数据长度和数据)
+        # 校验和 (check) - 从header到data[]的所有数据的累加和低8位
         checksum = 0
         for byte in frame:
-            checksum ^= byte
-        frame.append(checksum)
+            checksum += byte
+        frame.append(checksum & 0xFF)  # 累加和低8位
         
         return bytes(frame)
     
     def _parse_rs485_frame(self, data: bytes) -> Optional[Dict]:
         """解析RS485消息帧 - 符合瑞眼灵巧手协议"""
-        if len(data) < 5:  # 最小帧长度
+        if len(data) < 6:  # 最小帧长度: header(1) + id(2) + len(1) + data(0) + check(1) = 5
             return None
         
         if data[0] != 0xA5:
             return None
         
-        # 验证校验和
+        # 验证校验和 - 累加和低8位
         checksum = 0
         for byte in data[:-1]:  # 除了最后一个字节（校验和）
-            checksum ^= byte
+            checksum += byte
         
-        if checksum != data[-1]:
-            logger.debug(f"校验和错误: 计算值={checksum:02X}, 接收值={data[-1]:02X}")
+        if (checksum & 0xFF) != data[-1]:
+            logger.debug(f"校验和错误: 计算值={checksum & 0xFF:02X}, 接收值={data[-1]:02X}")
             # 暂时忽略校验和错误，继续解析
             # return None
         
         # 提取帧信息
-        device_id = data[1]
-        direction = data[2]  # 00=发送，01=接收
-        data_length = data[3]
-        data_part = list(data[4:-1])  # 数据部分（不包括校验和）
+        motor_id = data[1] | (data[2] << 8)  # ID (2字节)
+        data_length = data[3]                # 数据长度
+        data_part = list(data[4:-1])         # 数据部分（不包括校验和）
+        
+        # 调试信息
+        logger.debug(f"解析RS485帧: ID={motor_id} (0x{data[1]:02X} 0x{data[2]:02X}), 长度={data_length}, 数据长度={len(data_part)}")
         
         return {
-            'device_id': device_id,
-            'direction': direction,
+            'motor_id': motor_id,
             'data_length': data_length,
             'data_payload': data_part,
             'raw_data': list(data)
@@ -450,13 +452,19 @@ class RS485Interface(CommunicationInterface):
         
         # 在超时时间内收集响应
         while time.time() - start_time < timeout:
-            response_data = self.receive_message(timeout=0.1)
+            # 使用更短的接收超时时间以提高响应速度
+            response_data = self.receive_message(timeout=0.01)  # 10ms接收超时
             if response_data is None:
+                # 如果没有数据，短暂等待后继续
+                time.sleep(0.001)  # 1ms等待
                 continue
             
             parsed = self._parse_rs485_frame(response_data)
             if parsed and 'motor_id' in parsed:
                 motor_id = parsed['motor_id']
+                # 如果ID是257（0x01 0x01），可能是设备返回的响应ID，我们将其映射为1
+                if motor_id == 257:
+                    motor_id = 1
                 if motor_id not in results:
                     results[motor_id] = parsed
         
