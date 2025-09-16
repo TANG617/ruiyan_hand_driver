@@ -175,7 +175,26 @@ class RS485Tester:
     def test_specific_command(self):
         """测试指定的命令"""
         # 指定的十六进制命令
-        command = "A5 01 00 18 AA 00 00 E8 03 F4 01 00 AA 00 08 E8 03 F4 01 00 AA FF 0F E8 03 F4 01 00 72"
+        def append_checksum(hex_command: str) -> str:
+            """
+            计算命令的校验和（所有字节相加的低字节），并追加到命令末尾
+            Args:
+                hex_command: 以空格分隔的十六进制字符串
+            Returns:
+                添加校验和后的十六进制字符串
+            """
+            parts = hex_command.strip().split()
+            values = [int(x, 16) for x in parts]
+            checksum = sum(values) & 0xFF  # 取低8位
+            return hex_command.strip() + " {:02X}".format(checksum)
+
+        # 示例命令（不带校验和）
+        command = "A5 03 00 08 AA 00 30 E8 03 F4 01 00"
+        # command = "A5 00 00 08 A5 00 00 00 00 00 00 00"
+        # 自动添加校验和
+        command = append_checksum(command)
+
+        
         
         logger.info("=" * 60)
         logger.info("开始测试指定的RS485命令")
@@ -186,7 +205,7 @@ class RS485Tester:
         logger.info("=" * 60)
         
         # 发送命令并接收响应
-        response = self.send_and_receive(command, response_timeout=3.0)
+        response = self.send_and_receive(command, response_timeout=1.0)
         
         if response:
             logger.info("=" * 60)
@@ -202,7 +221,7 @@ class RS485Tester:
             logger.error("=" * 60)
             return False
     
-    def test_multiple_attempts(self, num_attempts: int = 3):
+    def test_multiple_attempts(self, num_attempts: int = 1):
         """多次尝试测试"""
         logger.info(f"开始多次尝试测试 (共{num_attempts}次)")
         
@@ -256,15 +275,15 @@ def main():
         
         # 测试连接
         print("\n1. 测试连接状态...")
-        tester.test_connection()
+        # tester.test_connection()
         
         # 测试指定命令
         print("\n2. 测试指定命令...")
         success = tester.test_specific_command()
         
-        if not success:
-            print("\n3. 尝试多次测试...")
-            tester.test_multiple_attempts(3)
+        # if not success:
+        #     print("\n3. 尝试多次测试...")
+        #     tester.test_multiple_attempts(3)
         
         print("\n测试完成")
         

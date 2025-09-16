@@ -131,8 +131,8 @@ def main():
     print("=" * 50)
     
     # 测试USB端口
-    usb_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1']
-    baudrates = [115200, 9600, 38400, 57600]
+    usb_ports = ['/dev/ttyACM0']
+    baudrates = [115200]
     
     working_ports = []
     
