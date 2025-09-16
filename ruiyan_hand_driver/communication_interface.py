@@ -17,8 +17,12 @@ logger = logging.getLogger(__name__)
 class CommunicationType(Enum):
     """通信类型枚举"""
     CAN = "can"
-    RS485 = "485"
     SERIAL = "serial"
+
+class CommunicationDirectionType(Enum):
+    """通信类型枚举"""
+    SEND = "send"
+    RECEIVE = "receive"
 
 
 @dataclass
@@ -35,9 +39,9 @@ class CommunicationConfig:
     can_bitrate: int = 1000000
     
     # RS485配置
-    rs485_port: str = '/dev/ttyACM0'
-    rs485_baudrate: int = 115200
-    rs485_timeout: float = 1.0
+    serial_port: str = '/dev/ttyACM0'
+    serial_baudrate: int = 115200
+    serial_timeout: float = 1.0
     
     def __post_init__(self):
         if self.motor_ids is None:
@@ -45,10 +49,10 @@ class CommunicationConfig:
     
     @classmethod
     def create_can_config(cls, motor_ids: List[int] = None, 
-                         interface: str = 'socketcan', 
-                         channel: str = 'can0', 
-                         bitrate: int = 1000000,
-                         auto_connect: bool = True) -> 'CommunicationConfig':
+                         interface: str = None, 
+                         channel: str = None, 
+                         bitrate: int = None,
+                         auto_connect: bool = False) -> 'CommunicationConfig':
         """创建CAN通信配置"""
         return cls(
             communication_type=CommunicationType.CAN,
@@ -60,18 +64,18 @@ class CommunicationConfig:
         )
     
     @classmethod
-    def create_rs485_config(cls, motor_ids: List[int] = None,
-                           port: str = '/dev/ttyUSB0',
-                           baudrate: int = 115200,
+    def create_serial_config(cls, motor_ids: List[int] = None,
+                           port: str = None,
+                           baudrate: int = None,
                            timeout: float = 1.0,
-                           auto_connect: bool = True) -> 'CommunicationConfig':
+                           auto_connect: bool = False) -> 'CommunicationConfig':
         """创建RS485通信配置"""
         return cls(
-            communication_type=CommunicationType.RS485,
+            communication_type=CommunicationType.SERIAL,
             motor_ids=motor_ids,
-            rs485_port=port,
-            rs485_baudrate=baudrate,
-            rs485_timeout=timeout,
+            serial_port=port,
+            serial_baudrate=baudrate,
+            serial_timeout=timeout,
             auto_connect=auto_connect
         )
     
@@ -85,11 +89,11 @@ class CommunicationConfig:
                 'motor_ids': self.motor_ids,
                 'auto_connect': False  # 由CommunicationManager控制
             }
-        elif self.communication_type == CommunicationType.RS485:
+        elif self.communication_type == CommunicationType.SERIAL:
             return {
-                'port': self.rs485_port,
-                'baudrate': self.rs485_baudrate,
-                'timeout': self.rs485_timeout,
+                'port': self.serial_port,
+                'baudrate': self.serial_baudrate,
+                'timeout': self.serial_timeout,
                 'auto_connect': False  # 由CommunicationManager控制
             }
         else:
@@ -97,23 +101,19 @@ class CommunicationConfig:
 
 
 @dataclass
-class DexhandMessage:
-    """Dexhand消息数据结构"""
-    command: int
+class RuiyanHandMessage:
+    """RuiyanHand消息数据结构"""
+    type: CommunicationType
+    direction: CommunicationDirectionType
     motor_id: int
-    data_payload: List[int] = None
-    timeout: float = 1.0
-    expected_response_id: Optional[int] = None
-    
-    def __post_init__(self):
-        if self.data_payload is None:
-            self.data_payload = []
+    instruction: int
+    payload: List[int] = None
 
 
 class CommunicationInterface(ABC):
     """通信接口抽象基类"""
     
-    def __init__(self, auto_connect: bool = True):
+    def __init__(self, auto_connect: bool):
         self.connected = False
         if auto_connect:
             self.connect()
@@ -134,176 +134,26 @@ class CommunicationInterface(ABC):
         pass
     
     @abstractmethod
-    def send_message(self, message: DexhandMessage) -> bool:
-        """发送消息"""
-        pass
-    
-    @abstractmethod
-    def receive_message(self, timeout: float = 1.0) -> Optional[Any]:
-        """接收消息"""
-        pass
-    
-    @abstractmethod
-    def send_and_receive(self, message: DexhandMessage) -> Dict[int, Any]:
+    def send_and_receive(self, message: RuiyanHandMessage) -> RuiyanHandMessage:
         """发送消息并接收响应"""
         pass
 
 
-class CANInterface(CommunicationInterface):
-    """CAN通信接口实现"""
-    
-    def __init__(self, interface: str = 'socketcan', channel: str = 'can0', 
-                 bitrate: int = 1000000, motor_ids: List[int] = [1, 2, 3, 4, 5, 6],
-                 auto_connect: bool = True):
-        self.interface = interface
-        self.channel = channel
-        self.bitrate = bitrate
-        self.motor_ids = motor_ids
-        self.response_ids = [0x100 + i for i in self.motor_ids]
-        self.bus = None
-        super().__init__(auto_connect)
-    
-    def connect(self) -> bool:
-        """连接CAN总线"""
-        try:
-            import can
-            bus_kwargs = {
-                "interface": self.interface,
-                "channel": self.channel,
-                "bitrate": self.bitrate,
-                "state": can.BusState.ACTIVE,
-            }
-            self.bus = can.Bus(**bus_kwargs)
-            self.connected = True
-            logger.info(f"CAN总线连接成功: {self.channel}")
-            return True
-        except ImportError:
-            self.connected = False
-            logger.error("CAN库未安装，请安装python-can: pip install python-can")
-            return False
-        except Exception as e:
-            self.connected = False
-            logger.error(f"CAN总线连接失败: {e}")
-            return False
-    
-    def disconnect(self):
-        """断开CAN总线连接"""
-        if self.bus and self.connected:
-            self.bus.shutdown()
-            self.connected = False
-            logger.info("CAN总线连接已断开")
-    
-    def is_connected(self) -> bool:
-        """检查CAN总线连接状态"""
-        return self.connected
-    
-    def send_message(self, message: DexhandMessage) -> bool:
-        """发送CAN消息"""
-        if not self.connected:
-            logger.error("CAN总线未连接")
-            return False
-
-        if message.motor_id not in self.motor_ids:
-            logger.error(f"无效的电机ID: {message.motor_id}")
-            return False
-        
-        # 构建CAN消息数据
-        data = [message.command]
-        if message.data_payload:
-            data.extend(message.data_payload[:7])
-        
-        # 填充到8字节
-        while len(data) < 8:
-            data.append(0x00)
-        
-        try:
-            import can
-            msg = can.Message(
-                arbitration_id=message.motor_id,
-                data=data,
-                is_extended_id=False
-            )
-            self.bus.send(msg)
-            logger.debug(f"CAN消息已发送: ID={message.motor_id}, 数据={[hex(x) for x in data]}")
-            return True
-        except ImportError:
-            logger.error("CAN库未安装，请安装python-can: pip install python-can")
-            return False
-        except Exception as e:
-            logger.error(f"CAN消息发送失败: {e}")
-            return False
-    
-    def receive_message(self, timeout: float = 1.0) -> Optional[Any]:
-        """接收单个CAN消息"""
-        if not self.connected:
-            return None
-        
-        try:
-            import can
-            rx = self.bus.recv(timeout=timeout)
-            return rx
-        except ImportError:
-            logger.error("CAN库未安装，请安装python-can: pip install python-can")
-            return None
-        except Exception as e:
-            logger.error(f"CAN消息接收失败: {e}")
-            return None
-    
-    def _collect_responses(self, timeout: float = 1.0) -> Dict[int, Optional[Any]]:
-        """收集多个电机的响应消息"""
-        if not self.connected:
-            return {}
-        
-        results = {}
-        expected_response_ids = {0x100 + motor_id: motor_id for motor_id in self.motor_ids}
-        
-        start_time = time.time()
-        while time.time() - start_time < timeout and len(results) < len(self.motor_ids):
-            rx = self.receive_message(timeout=0.1)
-            if rx is None:
-                continue
-            
-            motor_id = expected_response_ids.get(rx.arbitration_id)
-            if motor_id is not None and motor_id not in results:
-                results[motor_id] = rx
-        
-        # 为没有响应的电机添加None
-        for motor_id in self.motor_ids:
-            if motor_id not in results:
-                results[motor_id] = None
-        
-        return results
-    
-    def send_and_receive(self, message: DexhandMessage) -> Dict[int, Any]:
-        """发送消息并接收响应"""
-        if not self.send_message(message):
-            return {}
-        
-        # 如果是单个电机消息，接收单个响应
-        if message.expected_response_id:
-            rx = self.receive_message(message.timeout)
-            return {message.motor_id: rx}
-        
-        # 否则收集所有电机的响应
-        return self._collect_responses(message.timeout)
-
-
-class RS485Interface(CommunicationInterface):
+class SerialInterface(CommunicationInterface):
     """RS485通信接口实现"""
     
-    def __init__(self, port: str = '/dev/ttyUSB0', baudrate: int = 115200,
-                 timeout: float = 1.0, auto_connect: bool = True):
+    def __init__(self, port: str , baudrate: int ,timeout: float = 1.0, auto_connect: bool = False):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self.serial_conn = None
+        self.serial_controller = None
         super().__init__(auto_connect)
     
     def connect(self) -> bool:
-        """连接RS485串口"""
+        """连接R串口"""
         try:
             import serial
-            self.serial_conn = serial.Serial(
+            self.serial_controller = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=self.timeout,
@@ -312,7 +162,7 @@ class RS485Interface(CommunicationInterface):
                 bytesize=serial.EIGHTBITS
             )
             self.connected = True
-            logger.info(f"RS485串口连接成功: {self.port}")
+            logger.info(f"串口打开成功: {self.port}")
             return True
         except ImportError:
             self.connected = False
@@ -320,86 +170,77 @@ class RS485Interface(CommunicationInterface):
             return False
         except Exception as e:
             self.connected = False
-            logger.error(f"RS485串口连接失败: {e}")
+            logger.error(f"串口打开失败: {e}")
             return False
     
     def disconnect(self):
-        """断开RS485串口连接"""
+        """断开串口连接"""
         if self.serial_conn and self.connected:
             self.serial_conn.close()
             self.connected = False
-            logger.info("RS485串口连接已断开")
+            logger.info("串口连接已断开")
     
     def is_connected(self) -> bool:
         """检查RS485串口连接状态"""
         return self.connected
     
-    def send_message(self, message: DexhandMessage) -> bool:
+    def send_message(self, message: RuiyanHandMessage) -> bool:
         """发送RS485消息"""
         if not self.connected:
             logger.error("RS485串口未连接")
             return False
-        
-        try:
-            # 构建RS485消息帧
-            frame_data = self._build_rs485_frame(message)
-            self.serial_conn.write(frame_data)
-            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}")
-            logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in frame_data])}")
-            logger.debug(f"帧长度: {len(frame_data)} 字节")
-            return True
-        except Exception as e:
-            logger.error(f"RS485消息发送失败: {e}")
+
+        if message.direction == CommunicationDirectionType.SEND:
+            try:
+                # 构建RS485消息帧
+                serial_frame = self._build_serial_frame(message)
+                self.serial_controller.write(serial_frame)
+                logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}")
+                logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
+                logger.debug(f"帧长度: {len(serial_frame)} 字节")
+                return True
+            except Exception as e:
+                logger.error(f"RS485消息发送失败: {e}")
+                return False
+        else:
+            logger.error(f"不支持的通信方向: {message.direction}")
             return False
     
-    def receive_message(self, timeout: float = 1.0) -> Optional[bytes]:
+    def receive_message(self) -> RuiyanHandMessage:
         """接收RS485消息"""
         if not self.connected:
             return None
-        
         try:
-            # 设置超时
-            original_timeout = self.serial_conn.timeout
-            self.serial_conn.timeout = timeout
-            
-            # 读取消息
-            data = self.serial_conn.read(64)  # 假设最大消息长度为64字节
-            
-            # 恢复原始超时
-            self.serial_conn.timeout = original_timeout
-            
-            if data:
-                logger.debug(f"RS485消息已接收: 长度={len(data)}, 数据{[hex(x) for x in data]}")
-                return data
-            else:
-                return None
+            data = self.serial_controller.read(64)  # 假设最大消息长度为64字节
+            received_message = self._parse_serial_frame(data)
+            return received_message
         except Exception as e:
             logger.error(f"RS485消息接收失败: {e}")
             return None
     
-    def _build_rs485_frame(self, message: DexhandMessage) -> bytes:
+    def _build_serial_frame(self, message: RuiyanHandMessage) -> bytes:
         """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
-        # 正确的RS485帧格式: [header 0xA5][id 2字节][len 1字节][data n字节][check 1字节]
+        # 正确的RS485帧格式: [header 0xA5][motor_id 2字节][len 1字节][data n字节][check 1字节]
         frame = bytearray()
         
         # 起始符 (header)
         frame.append(0xA5)
         
         # ID (2字节) - 对应CAN/CANFD原生ID，使用电机ID
-        motor_id = message.motor_id if message.motor_id != 0 else 1  # 如果为0则使用1
+        motor_id = message.motor_id
         frame.append(motor_id & 0xFF)        # ID低字节
         frame.append((motor_id >> 8) & 0xFF) # ID高字节
         
         # 数据部分
-        data_part = []
-        if message.data_payload:
-            data_part.extend(message.data_payload)
+        data_segment = []
+        if message.payload:
+            data_segment.extend(message.payload)
         
         # 数据长度 (len)
-        frame.append(len(data_part))
+        frame.append(len(data_segment))
         
         # 数据 (data[])
-        frame.extend(data_part)
+        frame.extend(data_segment)
         
         # 校验和 (check) - 从header到data[]的所有数据的累加和低8位
         checksum = 0
@@ -409,9 +250,9 @@ class RS485Interface(CommunicationInterface):
         
         return bytes(frame)
     
-    def _parse_rs485_frame(self, data: bytes) -> Optional[Dict]:
+    def _parse_serial_frame(self, data: bytes) -> RuiyanHandMessage:
         """解析RS485消息帧 - 符合瑞眼灵巧手协议"""
-        if len(data) < 6:  # 最小帧长度: header(1) + id(2) + len(1) + data(0) + check(1) = 5
+        if len(data) < 6:  # 最小帧长度: header(1) + motor_id(2) + len(1) + data(0) + check(1) = 5
             return None
         
         if data[0] != 0xA5:
@@ -435,12 +276,20 @@ class RS485Interface(CommunicationInterface):
         # 调试信息
         logger.debug(f"解析RS485帧: ID={motor_id} (0x{data[1]:02X} 0x{data[2]:02X}), 长度={data_length}, 数据长度={len(data_part)}")
         
-        return {
-            'motor_id': motor_id,
-            'data_length': data_length,
-            'data_payload': data_part,
-            'raw_data': list(data)
-        }
+        return RuiyanHandMessage(
+            type=CommunicationType.SERIAL,
+            direction=CommunicationDirectionType.RECEIVE,
+            motor_id=motor_id,
+            instruction=data_length,
+            payload=data_part,
+            timeout=list(data)
+        )
+        # return {
+        #     'motor_id': motor_id,
+        #     'data_length': data_length,
+        #     'data_payload': data_part,
+        #     'raw_data': list(data)
+        # }
     
     def _collect_responses(self, timeout: float = 1.0) -> Dict[int, Optional[Any]]:
         """收集多个电机的响应消息"""
@@ -470,19 +319,14 @@ class RS485Interface(CommunicationInterface):
         
         return results
     
-    def send_and_receive(self, message: DexhandMessage) -> Dict[int, Any]:
+    def send_and_receive(self, message: RuiyanHandMessage) -> RuiyanHandMessage:
         """发送消息并接收响应"""
         if not self.send_message(message):
             return {}
         
         # 接收响应
-        response_data = self.receive_message(message.timeout)
-        if response_data:
-            parsed = self._parse_rs485_frame(response_data)
-            if parsed:
-                return {message.motor_id: parsed}
-        
-        return {message.motor_id: None}
+        received_message = self.receive_message()
+        return received_message
 
 
 class CommunicationManager:
