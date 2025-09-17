@@ -26,7 +26,7 @@ class CommunicationDirectionType(Enum):
     RECEIVE = "receive"
 
 @dataclass
-class RuiyanHandMessage:
+class RuiyanHandControlMessage:
     """RuiyanHand消息数据结构"""
     motor_id: int
     instruction: int
@@ -57,7 +57,7 @@ class CommunicationInterface(ABC):
         pass
     
     @abstractmethod
-    def send_and_receive(self, message: RuiyanHandMessage) -> RuiyanHandMessage:
+    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandControlMessage:
         """发送消息并接收响应"""
         pass
 
@@ -111,7 +111,7 @@ class SerialInterface(CommunicationInterface):
         """检查RS485串口连接状态"""
         return self.connected
     
-    def _send_message(self, message: RuiyanHandMessage) -> bool:
+    def _send_message(self, message: RuiyanHandControlMessage) -> bool:
         """发送RS485消息"""
         if not self.connected:
             logger.error("RS485串口未连接")
@@ -140,7 +140,7 @@ class SerialInterface(CommunicationInterface):
             logger.error(f"不支持的通信方向: {message.direction}")
             return False
     
-    def _receive_message(self) -> RuiyanHandMessage:
+    def _receive_message(self) -> RuiyanHandControlMessage:
         """接收RS485消息"""
         if not self.connected:
             return None
@@ -152,7 +152,7 @@ class SerialInterface(CommunicationInterface):
             logger.error(f"RS485消息接收失败: {e}")
             return None
     
-    def _build_serial_frame(self, message: RuiyanHandMessage) -> bytes:
+    def _build_serial_frame(self, message: RuiyanHandControlMessage) -> bytes:
         """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
         # 正确的RS485帧格式: [header 0xA5][motor_id 2字节][len 1字节][data n字节][check 1字节]
         frame = bytearray()
@@ -185,7 +185,7 @@ class SerialInterface(CommunicationInterface):
         
         return bytes(frame)
     
-    def _parse_serial_frame(self, data: bytes) -> RuiyanHandMessage:
+    def _parse_serial_frame(self, data: bytes) -> RuiyanHandControlMessage:
         """解析RS485消息帧 - 符合瑞眼灵巧手协议"""
         if len(data) < 6:  # 最小帧长度: header(1) + motor_id(2) + len(1) + data(0) + check(1) = 5
             return None
@@ -212,7 +212,7 @@ class SerialInterface(CommunicationInterface):
         # 调试信息
         logger.debug(f"解析RS485帧: ID={motor_id} (0x{data[1]:02X} 0x{data[2]:02X}), 长度={data_length}, 数据长度={len(data_part)}")
         
-        return RuiyanHandMessage(
+        return RuiyanHandControlMessage(
             type=CommunicationType.SERIAL,
             direction=CommunicationDirectionType.RECEIVE,
             motor_id=motor_id,
@@ -255,7 +255,7 @@ class SerialInterface(CommunicationInterface):
         
         return results
     
-    def send_and_receive(self, message: RuiyanHandMessage) -> RuiyanHandMessage:
+    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandControlMessage:
         """发送消息并接收响应"""
         if not self._send_message(message):
             return {}
