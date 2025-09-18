@@ -9,49 +9,49 @@ from typing import Dict, List, Optional
 from .ruiyan_hand_controller import DexhandController
 from .communication_interface import CommunicationConfig, CommunicationType
 
-class RuiyanHandController:
-    """单个瑞眼灵巧手控制器"""
+# class RuiyanHandController:
+#     """单个瑞眼灵巧手控制器"""
     
-    def __init__(self, hand_type: str, rs485_port: str, rs485_baudrate: int, 
-                 motor_ids: List[int], control_rate: float, logger):
-        self.hand_type = hand_type
-        self.logger = logger
+#     def __init__(self, hand_type: str, rs485_port: str, rs485_baudrate: int, 
+#                  motor_ids: List[int], control_rate: float, logger):
+#         self.hand_type = hand_type
+#         self.logger = logger
         
-        # 创建RS485通信配置
-        self.config = CommunicationConfig.create_rs485_config(
-            motor_ids=list(motor_ids),
-            port=rs485_port,
-            baudrate=rs485_baudrate
-        )
+#         # 创建RS485通信配置
+#         self.config = CommunicationConfig.create_rs485_config(
+#             motor_ids=list(motor_ids),
+#             port=rs485_port,
+#             baudrate=rs485_baudrate
+#         )
         
-        # 创建控制器
-        try:
-            self.controller = DexhandController(self.config)
-            if not self.controller.connect():
-                raise RuntimeError(f"无法连接到{hand_type}手部设备")
-            self.logger.info(f"{hand_type}手部控制器初始化成功 (RS485: {rs485_port})")
-        except Exception as e:
-            self.logger.error(f"初始化{hand_type}手部控制器失败: {e}")
-            raise
+#         # 创建控制器
+#         try:
+#             self.controller = DexhandController(self.config)
+#             if not self.controller.connect():
+#                 raise RuntimeError(f"无法连接到{hand_type}手部设备")
+#             self.logger.info(f"{hand_type}手部控制器初始化成功 (RS485: {rs485_port})")
+#         except Exception as e:
+#             self.logger.error(f"初始化{hand_type}手部控制器失败: {e}")
+#             raise
         
-        # 初始化缓冲区
-        self.set_angles_buffer = [0, 0, 0, 0, 0, 0]  # 目标角度缓冲区
-        self.joint_states_buffer = [0, 0, 0, 0, 0, 0]  # 当前状态缓冲区
+#         # 初始化缓冲区
+#         self.set_angles_buffer = [0, 0, 0, 0, 0, 0]  # 目标角度缓冲区
+#         self.joint_states_buffer = [0, 0, 0, 0, 0, 0]  # 当前状态缓冲区
         
-        # 频率监控
-        self.control_loop_count = 0
-        self.status_loop_count = 0
-        self.last_freq_check_time = time.time()
+#         # 频率监控
+#         self.control_loop_count = 0
+#         self.status_loop_count = 0
+#         self.last_freq_check_time = time.time()
         
-        # 初始化关节状态消息
-        self.current_joint_states = JointState()
-        self.current_joint_states.name = [f'{hand_type}_joint_{i}' for i in motor_ids]
-        self.current_joint_states.position = [0.0] * len(motor_ids)
-        self.current_joint_states.velocity = [0.0] * len(motor_ids)
-        self.current_joint_states.effort = [0.0] * len(motor_ids)
+#         # 初始化关节状态消息
+#         self.current_joint_states = JointState()
+#         self.current_joint_states.name = [f'{hand_type}_joint_{i}' for i in motor_ids]
+#         self.current_joint_states.position = [0.0] * len(motor_ids)
+#         self.current_joint_states.velocity = [0.0] * len(motor_ids)
+#         self.current_joint_states.effort = [0.0] * len(motor_ids)
         
-        self.control_rate = control_rate
-        self.motor_ids = motor_ids
+#         self.control_rate = control_rate
+#         self.motor_ids = motor_ids
 
 
 class RuiyanHandNode(Node):

@@ -11,26 +11,9 @@ import logging
 from turtle import pos
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from enum import IntEnum
-from .communication_interface import RuiyanHandControlMessage, CommunicationInterface, CommunicationType
+from .communication_interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanHandControlMessage, RuiyanHandStatusMessage, RuiyanHandInstructionType
 
 logger = logging.getLogger(__name__)
-
-
-class RuiyanHandInstructionType(IntEnum):
-    READ_MOTOR_INFO = 0xA0
-    CTRL_MOTOR_POSITION_VELOCITY_CURRENT = 0xAA
-    CLEAR_MOTOR_ERROR = 0xA5
-
-@dataclass
-class RuiyanHandStatusMessage:
-    """RuiyanHand消息数据结构"""
-    motor_id: int
-    instruction: RuiyanHandInstructionType
-    position:Optional[int]
-    velocity:Optional[int]
-    current:Optional[int]
-
 
 class RuiyanHandController:
     """Dexhand控制器，封装所有API函数"""
@@ -58,16 +41,6 @@ class RuiyanHandController:
         """检查连接状态"""
         return self.communication_interface.is_connected()
 
-    # def _create_message(self, command: int, motor_id: int, data_payload: List[int] = None, 
-    #                    timeout: float = 1.0, expected_response_id: Optional[int] = None) -> DexhandMessage:
-    #     """创建DexhandMessage对象"""
-    #     return DexhandMessage(
-    #         command=command,
-    #         motor_id=motor_id,
-    #         data_payload=data_payload or [],
-    #         timeout=timeout,
-    #         expected_response_id=expected_response_id
-    #     )
     
     def _validate_motor_ids(self, motor_ids: List[int]) -> bool:
         """验证电机ID列表"""
@@ -114,6 +87,7 @@ class RuiyanHandController:
         # 03 00 
         # 04 00 
         # 00 48
+        logger.debug(raw_bytes)
         raw = struct.unpack('>B B B 2B 3H 1B 1B', raw_bytes)
         header, _, motor_id, data_length, instruction = raw[0:5]
 

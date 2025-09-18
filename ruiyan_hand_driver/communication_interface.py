@@ -10,20 +10,20 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, IntEnum
 
 logger = logging.getLogger(__name__)
 
+class RuiyanHandInstructionType(IntEnum):
+    READ_MOTOR_INFO = 0xA0
+    CTRL_MOTOR_POSITION_VELOCITY_CURRENT = 0xAA
+    CLEAR_MOTOR_ERROR = 0xA5
 
 class CommunicationType(Enum):
     """通信类型枚举"""
     CAN = "can" # not implementated 
     SERIAL = "serial"
 
-class CommunicationDirectionType(Enum):
-    """通信类型枚举"""
-    SEND = "send"
-    RECEIVE = "receive"
 
 @dataclass
 class RuiyanHandControlMessage:
@@ -32,6 +32,14 @@ class RuiyanHandControlMessage:
     instruction: int
     payload: List[int] = None
 
+@dataclass
+class RuiyanHandStatusMessage:
+    """RuiyanHand消息数据结构"""
+    motor_id: int
+    instruction: RuiyanHandInstructionType
+    position:Optional[int]
+    velocity:Optional[int]
+    current:Optional[int]
 
 class CommunicationInterface(ABC):
     """通信接口抽象基类"""
@@ -124,30 +132,27 @@ class SerialInterface(CommunicationInterface):
             logger.debug(f"帧长度: {len(serial_frame)} 字节")
             return True
 
-        if message.direction == CommunicationDirectionType.SEND:
-            try:
-                # 构建RS485消息帧
-                serial_frame = self._build_serial_frame(message)
-                self.serial_controller.write(serial_frame)
-                logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.command)}")
-                logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
-                logger.debug(f"帧长度: {len(serial_frame)} 字节")
-                return True
-            except Exception as e:
-                logger.error(f"RS485消息发送失败: {e}")
-                return False
-        else:
-            logger.error(f"不支持的通信方向: {message.direction}")
-            return False
     
-    def _receive_message(self) -> RuiyanHandControlMessage:
+        try:
+            # 构建RS485消息帧
+            serial_frame = self._build_serial_frame(message)
+            self.serial_controller.write(serial_frame)
+            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.instruction)}")
+            logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
+            logger.debug(f"帧长度: {len(serial_frame)} 字节")
+            return True
+        except Exception as e:
+            logger.error(f"RS485消息发送失败: {e}")
+            return False
+
+    
+    def _receive_message(self) -> bytes:
         """接收RS485消息"""
         if not self.connected:
             return None
         try:
-            data = self.serial_controller.read(64)  # 假设最大消息长度为64字节
-            received_message = self._parse_serial_frame(data)
-            return received_message
+            response = self.serial_controller.read(64)  # 假设最大消息长度为64字节
+            return response
         except Exception as e:
             logger.error(f"RS485消息接收失败: {e}")
             return None
@@ -182,80 +187,12 @@ class SerialInterface(CommunicationInterface):
         for byte in frame:
             checksum += byte
         frame.append(checksum & 0xFF)  # 累加和低8位
-        
+
+        logger.debug(frame)
         return bytes(frame)
     
-    def _parse_serial_frame(self, data: bytes) -> RuiyanHandControlMessage:
-        """解析RS485消息帧 - 符合瑞眼灵巧手协议"""
-        if len(data) < 6:  # 最小帧长度: header(1) + motor_id(2) + len(1) + data(0) + check(1) = 5
-            return None
-        
-        if data[0] != 0xA5:
-            return None
-        
-        # 验证校验和 - 累加和低8位
-        checksum = 0
-        for byte in data[:-1]:  # 除了最后一个字节（校验和）
-            checksum += byte
-        
-        if (checksum & 0xFF) != data[-1]:
-            logger.debug(f"校验和错误: 计算值={checksum & 0xFF:02X}, 接收值={data[-1]:02X}")
-            # 暂时忽略校验和错误，继续解析
-            # return None
-        
-        # 提取帧信息
-        motor_id = data[1] | (data[2] << 8)  # ID (2字节)
-        data_length = data[3]                # 数据长度
-        instruction = data[4]
-        data_segment = list(data[5:-1])         # 数据部分（不包括校验和）
-        
-        # 调试信息
-        logger.debug(f"解析RS485帧: ID={motor_id} (0x{data[1]:02X} 0x{data[2]:02X}), 长度={data_length}, 数据长度={len(data_part)}")
-        
-        return RuiyanHandControlMessage(
-            type=CommunicationType.SERIAL,
-            direction=CommunicationDirectionType.RECEIVE,
-            motor_id=motor_id,
-            instruction=instruction,
-            payload=data_segment,
-            timeout=list(data)
-        )
-        # return {
-        #     'motor_id': motor_id,
-        #     'data_length': data_length,
-        #     'data_payload': data_part,
-        #     'raw_data': list(data)
-        # }
     
-    def _collect_responses(self, timeout: float = 1.0) -> Dict[int, Optional[Any]]:
-        """收集多个电机的响应消息"""
-        if not self.connected:
-            return {}
-        
-        results = {}
-        start_time = time.time()
-        
-        # 在超时时间内收集响应
-        while time.time() - start_time < timeout:
-            # 使用更短的接收超时时间以提高响应速度
-            response_data = self.receive_message(timeout=0.01)  # 10ms接收超时
-            if response_data is None:
-                # 如果没有数据，短暂等待后继续
-                time.sleep(0.001)  # 1ms等待
-                continue
-            
-            parsed = self._parse_rs485_frame(response_data)
-            if parsed and 'motor_id' in parsed:
-                motor_id = parsed['motor_id']
-                # 如果ID是257（0x01 0x01），可能是设备返回的响应ID，我们将其映射为1
-                if motor_id == 257:
-                    motor_id = 1
-                if motor_id not in results:
-                    results[motor_id] = parsed
-        
-        return results
-    
-    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandControlMessage:
+    def send_and_receive(self, message: RuiyanHandControlMessage) -> bytes:
         """发送消息并接收响应"""
         if not self._send_message(message):
             return {}
@@ -264,5 +201,5 @@ class SerialInterface(CommunicationInterface):
         if(self.mock == True):
             logger.debug("Mock模式，无需接收数据")
             return {}
-        received_message = self._receive_message()
-        return received_message
+        response = self._receive_message()
+        return response
