@@ -11,7 +11,7 @@ import logging
 from turtle import pos
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from .communication_interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanHandControlMessage, RuiyanHandStatusMessage, RuiyanHandInstructionType
+from .interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanHandControlMessage, RuiyanHandStatusMessage, RuiyanHandInstructionType
 
 logger = logging.getLogger(__name__)
 

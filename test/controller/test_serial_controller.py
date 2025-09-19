@@ -12,8 +12,8 @@ logging.basicConfig(
 sys.path.append(os.path.join(os.path.dirname(__file__),"..",".."))
 
 
-from ruiyan_hand_driver.communication_interface import   SerialInterface, RuiyanHandInstructionType
-from ruiyan_hand_driver.ruiyan_hand_controller import  RuiyanHandController
+from ruiyan_hand_driver.interface import   SerialInterface, RuiyanHandInstructionType
+from ruiyan_hand_driver.controller import  RuiyanHandController
 
 
 interface = SerialInterface(port="/dev/tty.usbmodemBD65E8ABCD1", baudrate=115200, mock=False)
