@@ -50,22 +50,23 @@ class RuiyanHandController:
         return True
 
     def _set_motor(self, motor_id:int, instruction:RuiyanHandInstructionType, position:Optional[int], velocity:Optional[int], current:Optional[int]) -> RuiyanHandStatusMessage:
-        payload=[]
-        match instruction:
-            case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
-                payload.extend(
-                    [position & 0xFF,              # 位置低字节
-                    (position >> 8) & 0xFF,       # 位置高字节
-                    velocity & 0xFF,                 # 速度低字节
-                    (velocity >> 8) & 0xFF,          # 速度高字节
-                    current & 0xFF,         # 电流低字节
-                    (current >> 8) & 0xFF,   # 电流高字节
-                    0x00
-                    ]
-                )
+        # payload=[]
+        # match instruction:
+        #     case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
+        #         payload.extend(
+        #             [position & 0xFF,              # 位置低字节
+        #             (position >> 8) & 0xFF,       # 位置高字节
+        #             velocity & 0xFF,                 # 速度低字节
+        #             (velocity >> 8) & 0xFF,          # 速度高字节
+        #             current & 0xFF,         # 电流低字节
+        #             (current >> 8) & 0xFF,   # 电流高字节
+        #             0x00
+        #             ]
+        #         )
 
-        message = RuiyanHandControlMessage(motor_id=motor_id,instruction=instruction,payload=payload)
-        status = self._parse_response(self.communication_interface.send_and_receive(message=message))
+        request_message = RuiyanHandControlMessage(motor_id=motor_id,instruction=instruction,position=position,velocity=velocity,current=current)
+        logger.info(f"【发送】电机ID: {request_message.motor_id}, 指令: {request_message.instruction}, 位置: {request_message.position}, 速度: {request_message.velocity}, 电流: {request_message.current}")
+        status = self._parse_response(self.communication_interface.send_and_receive(message=request_message))
         return status
 
     def set_motors(self, instruction:RuiyanHandInstructionType, position:Optional[List[int]], velocity:Optional[List[int]], current:Optional[List[int]]) -> List[RuiyanHandStatusMessage]:
@@ -87,17 +88,18 @@ class RuiyanHandController:
         # 03 00 
         # 04 00 
         # 00 48
-        logger.debug(raw_bytes)
         raw = struct.unpack('>B B B 2B 3H 1B 1B', raw_bytes)
         header, _, motor_id, data_length, instruction = raw[0:5]
 
         match instruction:
             case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
                 position, velocity, current, validation = raw[6:]
-                return RuiyanHandStatusMessage(
+                response_message =  RuiyanHandStatusMessage(
                 motor_id=motor_id,
                 instruction=RuiyanHandInstructionType(instruction),
                 position=position,
                 velocity=velocity,
                 current=current
-            )
+                )
+                logger.info(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
+        

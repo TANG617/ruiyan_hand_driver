@@ -7,6 +7,7 @@
 from dis import Instruction
 import time
 import logging
+import struct
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -29,8 +30,10 @@ class CommunicationType(Enum):
 class RuiyanHandControlMessage:
     """RuiyanHand消息数据结构"""
     motor_id: int
-    instruction: int
-    payload: List[int] = None
+    instruction: RuiyanHandInstructionType
+    position:Optional[int]
+    velocity:Optional[int]
+    current:Optional[int]
 
 @dataclass
 class RuiyanHandStatusMessage:
@@ -65,7 +68,7 @@ class CommunicationInterface(ABC):
         pass
     
     @abstractmethod
-    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandControlMessage:
+    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandStatusMessage:
         """发送消息并接收响应"""
         pass
 
@@ -73,7 +76,7 @@ class CommunicationInterface(ABC):
 class SerialInterface(CommunicationInterface):
     """RS485通信接口实现"""
     
-    def __init__(self, port: str , baudrate: int ,timeout: float = 1.0, auto_connect: bool = False, mock:bool=False):
+    def __init__(self, port: str , baudrate: int ,timeout: float = 0.006, auto_connect: bool = False, mock:bool=False): #6ms is the fastes speed
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -127,9 +130,7 @@ class SerialInterface(CommunicationInterface):
 
         if self.mock == True:
             serial_frame = self._build_serial_frame(message)
-            logger.debug(f"Mock消息已发送: 电机{message.motor_id}, 命令{hex(message.instruction)}")
-            logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
-            logger.debug(f"帧长度: {len(serial_frame)} 字节")
+            logger.debug(f"【发送】电机ID: {message.motor_id}, 指令: {hex(message.instruction)}, 帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
             return True
 
     
@@ -137,12 +138,10 @@ class SerialInterface(CommunicationInterface):
             # 构建RS485消息帧
             serial_frame = self._build_serial_frame(message)
             self.serial_controller.write(serial_frame)
-            logger.debug(f"RS485消息已发送: 电机{message.motor_id}, 命令{hex(message.instruction)}")
-            logger.debug(f"发送的完整帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
-            logger.debug(f"帧长度: {len(serial_frame)} 字节")
+            logger.debug(f"【发送】电机ID: {message.motor_id}, 指令: {hex(message.instruction)}, 帧数据: {' '.join([f'{byte:02X}' for byte in serial_frame])}")
             return True
         except Exception as e:
-            logger.error(f"RS485消息发送失败: {e}")
+            logger.error(f"串口消息发送失败: {e}")
             return False
 
     
@@ -160,36 +159,40 @@ class SerialInterface(CommunicationInterface):
     def _build_serial_frame(self, message: RuiyanHandControlMessage) -> bytes:
         """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
         # 正确的RS485帧格式: [header 0xA5][motor_id 2字节][len 1字节][data n字节][check 1字节]
-        frame = bytearray()
-        
-        # 起始符 (header)
-        frame.append(0xA5)
-        
-        # ID (2字节) - 对应CAN/CANFD原生ID，使用电机ID
-        motor_id = message.motor_id
-        frame.append(motor_id & 0xFF)        # ID低字节
-        frame.append((motor_id >> 8) & 0xFF) # ID高字节
-        
-        # 数据部分
-        data_segment = []
-        if message.payload:
-            data_segment.extend(message.payload)
-        
-        # 数据长度 (len)
-        frame.append(len(data_segment)+1)
-        frame.append(message.instruction)
-        
-        # 数据 (data[])
-        frame.extend(data_segment)
-        
-        # 校验和 (check) - 从header到data[]的所有数据的累加和低8位
-        checksum = 0
-        for byte in frame:
-            checksum += byte
-        frame.append(checksum & 0xFF)  # 累加和低8位
+        serial_frame = struct.pack('>B B B 2B 3H 1B', 
+                         0xA5, 
+                         message.motor_id, 
+                         0x00, 
+                         0x08, 
+                         message.instruction, 
+                         message.position, 
+                         message.velocity, 
+                         message.current, 
+                         0x00)
 
-        logger.debug(frame)
-        return bytes(frame)
+        checksum = 0
+        for byte in serial_frame:
+            checksum += byte
+        
+        serial_frame = struct.pack('>B B B 2B 3H 1B 1B', 
+                         0xA5, 
+                         message.motor_id, 
+                         0x00, 
+                         0x08, 
+                         message.instruction, 
+                         message.position, 
+                         message.velocity, 
+                         message.current, 
+                         0x00,
+                         checksum & 0xFF
+                         )
+
+        # checksum = 0
+        # for byte in serial_frame:
+        #     checksum += byte
+        # serial_frame.append(checksum & 0xFF)  # 累加和低8位
+
+        return serial_frame
     
     
     def send_and_receive(self, message: RuiyanHandControlMessage) -> bytes:
