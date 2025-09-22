@@ -82,25 +82,24 @@ class RuiyanHandController:
         return status_list
 
 
-
     def _parse_response(self, raw_bytes: bytes) -> RuiyanHandStatusMessage:
         # A5 02 01 08 AA 
         # 00 E7 
         # 03 00 
         # 04 00 
         # 00 48
-        raw = struct.unpack('<B B B 2B 6B 1B 1B', raw_bytes)
+        raw = struct.unpack('<BBBBBHHHBB', raw_bytes)
         header, motor_id, _, data_length, instruction = raw[0:5]
 
         match instruction:
             case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
-                position_high,position_low, velocity_high,velocity_low, current_high,current_low, _, validation = raw[5:]
+                position, velocity, current, _, validation = raw[5:]
                 response_message =  RuiyanHandStatusMessage(
                 motor_id=motor_id,
                 instruction=RuiyanHandInstructionType(instruction),
-                position=position_high*256+position_low,
-                velocity=velocity_high*256+velocity_low,
-                current=current_high*256+velocity_low
+                position=position,
+                velocity=velocity,
+                current=current
                 )
                 if response_message.motor_id==3:
                     logger.info(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
