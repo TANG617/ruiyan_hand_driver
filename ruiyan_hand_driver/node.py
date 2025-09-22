@@ -92,9 +92,9 @@ class RuiyanHandNode(Node):
             self.right_hand_joint_states_publisher.publish(right_joint_state)
 
     def set(self, msg: JointState, controller:RuiyanHandController):
-        controller.position_list = msg.position
-        controller.velocity_list = msg.velocity
-        controller.current_list = msg.effort
+        controller.position_list = [int(p) for p in msg.position]
+        controller.velocity_list = [int(v) for v in msg.velocity]
+        controller.current_list = [int(e) for e in msg.effort]
 
 
 def main():

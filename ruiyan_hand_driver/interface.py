@@ -31,9 +31,12 @@ class RuiyanHandControlMessage:
     """RuiyanHand消息数据结构"""
     motor_id: int
     instruction: RuiyanHandInstructionType
-    position:Optional[int]
-    velocity:Optional[int]
-    current:Optional[int]
+    position: Optional[int]
+    velocity: Optional[int]
+    current: Optional[int]
+
+    def print(self):
+        print(f"motor_id: {self.motor_id}, instruction: {self.instruction}, position: {self.position}, velocity: {self.velocity}, current: {self.current}")
 
 @dataclass
 class RuiyanHandStatusMessage:
@@ -43,6 +46,8 @@ class RuiyanHandStatusMessage:
     position:Optional[int]
     velocity:Optional[int]
     current:Optional[int]
+    def print(self):
+        print(f"motor_id: {self.motor_id}, instruction: {self.instruction}, position: {self.position}, velocity: {self.velocity}, current: {self.current}")
 
 class CommunicationInterface(ABC):
     """通信接口抽象基类"""
@@ -159,7 +164,7 @@ class SerialInterface(CommunicationInterface):
     def _build_serial_frame(self, message: RuiyanHandControlMessage) -> bytes:
         """构建RS485消息帧 - 符合瑞眼灵巧手协议"""
         # 正确的RS485帧格式: [header 0xA5][motor_id 2字节][len 1字节][data n字节][check 1字节]
-        serial_frame = struct.pack('>B B B 2B 3H 1B', 
+        serial_frame = struct.pack('<B B B 2B 3H 1B', 
                          0xA5, 
                          message.motor_id, 
                          0x00, 
@@ -174,7 +179,7 @@ class SerialInterface(CommunicationInterface):
         for byte in serial_frame:
             checksum += byte
         
-        serial_frame = struct.pack('>B B B 2B 3H 1B 1B', 
+        serial_frame = struct.pack('<B B B 2B 3H 1B 1B', 
                          0xA5, 
                          message.motor_id, 
                          0x00, 
