@@ -11,16 +11,18 @@ logging.basicConfig(
 sys.path.append(os.path.join(os.path.dirname(__file__),"..",".."))
 
 
-from ruiyan_hand_driver.communication_interface import  CommunicationDirectionType, CommunicationType, SerialInterface, RuiyanHandMessage
+from ruiyan_hand_driver.interface import  CommunicationType, SerialInterface, RuiyanHandControlMessage, RuiyanHandInstructionType, RuiyanHandStatusMessage
 
-message = RuiyanHandMessage(
+message = RuiyanHandControlMessage(
     motor_id=2,
-    instruction=0xAA,
-    payload=[0xE8, 0x03, 0xE8, 0x03, 0xF4, 0x01, 0x00]
+    instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT,
+    position=0,
+    velocity=3000,
+    current=1000,
 )
 
-interface = SerialInterface(port="/dev/ttyACM0", baudrate=115200, mock=True)
+interface = SerialInterface(port="/dev/ttyACM0", baudrate=115200)
 interface.connect()
-interface.send_message(message=message)
+response = interface.send_and_receive(message=message)
 
 

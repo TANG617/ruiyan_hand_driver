@@ -3,6 +3,8 @@ import os
 import logging
 from typing import Container
 
+import rclpy
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -19,6 +21,7 @@ import time
 from ruiyan_hand_driver.node import RuiyanHandNode
 
 
-interface = SerialInterface(port="/dev/tty.usbmodemBD65E8ABCD1", baudrate=115200, mock=False)
+interface = SerialInterface(port="/dev/ttyACM0", baudrate=115200, mock=False, auto_connect=True)
 controller = RuiyanHandController(interface,motors_id=[1,2,3,4,5,6])
-node = RuiyanHandNode(left_hand=controller)
+node = RuiyanHandNode(left_hand=controller,right_hand=None)
+rclpy.spin(node)

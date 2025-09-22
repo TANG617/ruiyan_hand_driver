@@ -3,16 +3,22 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from .controller import RuiyanHandController, RuiyanHandInstructionType
+import logging
 
 
 logger = logging.getLogger(__name__)
 class RuiyanHandNode(Node):
     def __init__(self, left_hand:Optional[RuiyanHandController], right_hand: Optional[RuiyanHandController], topic_prefix:str="ruiyan", frequency:int=100):
+        rclpy.init()
+        super().__init__("ruiyan_hand_node")
         self.topic_prefix = topic_prefix
         self.left_hand = left_hand
         self.right_hand = right_hand
 
+
         self.create_timer(1.0 / frequency, self.loop)  # 100Hz控制循环
+
+
     
     def loop(self):
         position_list = [0, 0, 0, 0, 0, 0]
