@@ -20,6 +20,50 @@ class RuiyanHandInstructionType(IntEnum):
     CTRL_MOTOR_POSITION_VELOCITY_CURRENT = 0xAA
     CLEAR_MOTOR_ERROR = 0xA5
 
+class RuiyanHandStatusCode(IntEnum):
+    """瑞眼灵巧手状态码枚举"""
+    SERVO_OK = 0                    # 电机响应函数操作成功
+    SERVO_TEMPERATURE_HIGH_W = 1    # 电机过温告警
+    SERVO_TEMPERATURE_HIGH_E = 2    # 电机过温保护
+    SERVO_VOLTAGE_LOW_E = 3         # 电机低压保护
+    SERVO_VOLTAGE_HIGH_E = 4        # 电机过压保护
+    SERVO_CURRENT_OVER_E = 5        # 电机过流保护
+    SERVO_TORQUE_OVER_E = 6         # 电机力矩保护
+    SERVO_FUSE_E = 7                # 电机熔丝位错保护
+    SERVO_PWM_E = 8                 # 电机堵转保护
+    SERVO_DRIVE_E = 9               # 驱动器异常保护
+    SERVO_HALL_E = 10               # 电机hall错保护
+    SERVO_FAIL = 250                # 伺服未响应函数操作或响应超时
+    SERVO_PARAM_ERR = 251           # 伺服响应数据出错
+    SERVO_LIB_INIT_ERR = 252        # 伺服组群结构体读写函数未初始化或失败
+    CAN_FORMAT_ERROR = 253          # 异步解析时can数据格式不符
+    CAN_MSG_SENT_FAIL = 254         # can消息发送失败
+    LIB_HOOK_APPLY_FAILED = 255     # hook申请失败
+
+    @classmethod
+    def get_description(cls, status_code: int) -> str:
+        """获取状态码的中文描述"""
+        descriptions = {
+            cls.SERVO_OK: "操作成功",
+            cls.SERVO_TEMPERATURE_HIGH_W: "电机过温告警",
+            cls.SERVO_TEMPERATURE_HIGH_E: "电机过温保护",
+            cls.SERVO_VOLTAGE_LOW_E: "电机低压保护", 
+            cls.SERVO_VOLTAGE_HIGH_E: "电机过压保护",
+            cls.SERVO_CURRENT_OVER_E: "电机过流保护",
+            cls.SERVO_TORQUE_OVER_E: "电机力矩保护",
+            cls.SERVO_FUSE_E: "电机熔丝位错保护",
+            cls.SERVO_PWM_E: "电机堵转保护",
+            cls.SERVO_DRIVE_E: "驱动器异常保护",
+            cls.SERVO_HALL_E: "电机hall错保护",
+            cls.SERVO_FAIL: "伺服未响应或超时",
+            cls.SERVO_PARAM_ERR: "伺服响应数据出错",
+            cls.SERVO_LIB_INIT_ERR: "伺服组群结构体未初始化",
+            cls.CAN_FORMAT_ERROR: "CAN数据格式不符",
+            cls.CAN_MSG_SENT_FAIL: "CAN消息发送失败",
+            cls.LIB_HOOK_APPLY_FAILED: "Hook申请失败"
+        }
+        return descriptions.get(status_code, f"未知状态码: {status_code}")
+
 class CommunicationType(Enum):
     """通信类型枚举"""
     CAN = "can" # not implementated 
@@ -47,7 +91,7 @@ class RuiyanHandStatusMessage:
     velocity:Optional[int]
     current:Optional[int]
     def print(self):
-        print(f"motor_id: {self.motor_id}, instruction: {self.instruction}, position: {self.position}, velocity: {self.velocity}, current: {self.current}")
+        print(f"电机ID: {self.motor_id}, 指令: {self.instruction}, 位置: {self.position}, 速度: {self.velocity}, 电流: {self.current}")
 
 class CommunicationInterface(ABC):
     """通信接口抽象基类"""

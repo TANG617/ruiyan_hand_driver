@@ -12,7 +12,7 @@ import logging
 from turtle import pos
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from .interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanHandControlMessage, RuiyanHandStatusMessage, RuiyanHandInstructionType
+from .interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanHandControlMessage, RuiyanHandStatusMessage, RuiyanHandInstructionType, RuiyanHandStatusCode
 
 logger = logging.getLogger(__name__)
 
@@ -87,12 +87,21 @@ class RuiyanHandController:
         # 03 00 
         # 04 00 
         # 00 48
-        raw = struct.unpack('<6B 3H B', raw_bytes)
+
+
+        # A5 02 01 08 AA 
+        # 00 
+        # E7 03 
+        # 00 04 
+        # 00 00 
+        # 48
+        raw = struct.unpack('<6B 3H 1B', raw_bytes)
         header, motor_id, _, data_length, instruction = raw[0:5]
 
         match instruction:
             case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
-                _, position, velocity, current,  validation = raw[5:]
+                status_code, position, velocity, current, validation= raw[5:]
+
                 response_message =  RuiyanHandStatusMessage(
                 motor_id=motor_id,
                 instruction=RuiyanHandInstructionType(instruction),
@@ -101,7 +110,12 @@ class RuiyanHandController:
                 current=current
                 )
 
-                logger.debug(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
+                if status_code != 0:
+                    status_desc = RuiyanHandStatusCode.get_description(status_code)
+                    logger.error(f"【错误】电机ID: {motor_id}, 状态码: {status_code}, 错误信息: {status_desc}")
+                else:
+                    logger.debug(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
+                
                 return response_message
         
 
