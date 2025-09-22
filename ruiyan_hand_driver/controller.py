@@ -56,8 +56,7 @@ class RuiyanHandController:
 
     def _set_motor(self, motor_id:int, position:Optional[int], velocity:Optional[int], current:Optional[int]) -> RuiyanHandStatusMessage:
         request_message = RuiyanHandControlMessage(motor_id=motor_id,instruction=self.instruction,position=position,velocity=velocity,current=current)
-        if request_message.motor_id == 3:
-            logger.info(f"【发送】电机ID: {request_message.motor_id}, 指令: {request_message.instruction}, 位置: {request_message.position}, 速度: {request_message.velocity}, 电流: {request_message.current}")
+        logger.debug(f"【发送】电机ID: {request_message.motor_id}, 指令: {request_message.instruction}, 位置: {request_message.position}, 速度: {request_message.velocity}, 电流: {request_message.current}")
         status = self._parse_response(self.communication_interface.send_and_receive(message=request_message))
         return status
 
@@ -88,12 +87,12 @@ class RuiyanHandController:
         # 03 00 
         # 04 00 
         # 00 48
-        raw = struct.unpack('<BBBBBHHHBB', raw_bytes)
+        raw = struct.unpack('<6B 3H B', raw_bytes)
         header, motor_id, _, data_length, instruction = raw[0:5]
 
         match instruction:
             case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
-                position, velocity, current, _, validation = raw[5:]
+                _, position, velocity, current,  validation = raw[5:]
                 response_message =  RuiyanHandStatusMessage(
                 motor_id=motor_id,
                 instruction=RuiyanHandInstructionType(instruction),
@@ -101,8 +100,8 @@ class RuiyanHandController:
                 velocity=velocity,
                 current=current
                 )
-                if response_message.motor_id==3:
-                    logger.info(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
+
+                logger.debug(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
                 return response_message
         
 
