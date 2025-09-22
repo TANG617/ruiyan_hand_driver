@@ -5,6 +5,7 @@ Dexhand控制器模块
 """
 
 from dis import Instruction
+from readline import insert_text
 import time
 import struct
 import logging
@@ -19,10 +20,14 @@ class RuiyanHandController:
     """Dexhand控制器，封装所有API函数"""
     
     
-    def __init__(self, communication_interface:CommunicationInterface, motors_id:[int]):
+    def __init__(self, communication_interface:CommunicationInterface, motors_id:[int], instruction:RuiyanHandInstructionType = None):
 
         self.motor_ids = motors_id
         self.communication_interface = communication_interface
+        self.instruction = instruction
+        self.position_list=[0,0,0,0,0,0]
+        self.velocity_list=[0,0,0,0,0,0]
+        self.current_list= [0,0,0,0,0,0]
         self.command_names = {
             0xA0: "读取电机信息",
             0xAA: "位置速度电流混合控制",
@@ -49,37 +54,33 @@ class RuiyanHandController:
                 return False
         return True
 
-    def _set_motor(self, motor_id:int, instruction:RuiyanHandInstructionType, position:Optional[int], velocity:Optional[int], current:Optional[int]) -> RuiyanHandStatusMessage:
-        # payload=[]
-        # match instruction:
-        #     case RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT:
-        #         payload.extend(
-        #             [position & 0xFF,              # 位置低字节
-        #             (position >> 8) & 0xFF,       # 位置高字节
-        #             velocity & 0xFF,                 # 速度低字节
-        #             (velocity >> 8) & 0xFF,          # 速度高字节
-        #             current & 0xFF,         # 电流低字节
-        #             (current >> 8) & 0xFF,   # 电流高字节
-        #             0x00
-        #             ]
-        #         )
-
-        request_message = RuiyanHandControlMessage(motor_id=motor_id,instruction=instruction,position=position,velocity=velocity,current=current)
+    def _set_motor(self, motor_id:int, position:Optional[int], velocity:Optional[int], current:Optional[int]) -> RuiyanHandStatusMessage:
+        request_message = RuiyanHandControlMessage(motor_id=motor_id,instruction=self.instruction,position=position,velocity=velocity,current=current)
         logger.info(f"【发送】电机ID: {request_message.motor_id}, 指令: {request_message.instruction}, 位置: {request_message.position}, 速度: {request_message.velocity}, 电流: {request_message.current}")
         status = self._parse_response(self.communication_interface.send_and_receive(message=request_message))
         return status
 
-    def set_motors(self, instruction:RuiyanHandInstructionType, position:Optional[List[int]], velocity:Optional[List[int]], current:Optional[List[int]]) -> List[RuiyanHandStatusMessage]:
+    def set(self, position_list:Optional[List[int]] = None, velocity_list:Optional[List[int]] = None, current_list:Optional[List[int]] = None) -> bool:
+        if position_list is not None:
+            self.position_list = position_list
+        if velocity_list is not None:
+            self.velocity_list = velocity_list
+        if current_list is not None:
+            self.current_list = current_list
+        return True
+
+    def loop(self):
         status_list = []
         for index, motor_id in enumerate(self.motor_ids):
             status_list.append(
                 self._set_motor(
                     motor_id=motor_id,
-                    instruction=instruction,
-                    position=position[index],
-                    velocity=velocity[index],
-                    current=current[index]))
+                    instruction=self.instruction,
+                    position=self.position_list[index],
+                    velocity=self.velocity_list[index],
+                    current=self.current_list[index]))
         return status_list
+
 
 
     def _parse_response(self, raw_bytes: bytes) -> RuiyanHandStatusMessage:
@@ -103,3 +104,4 @@ class RuiyanHandController:
                 )
                 logger.info(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
         
+
