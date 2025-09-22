@@ -87,11 +87,13 @@ class RuiyanHandStatusMessage:
     """RuiyanHand消息数据结构"""
     motor_id: int
     instruction: RuiyanHandInstructionType
-    position:Optional[int]
-    velocity:Optional[int]
-    current:Optional[int]
+    status: int  # 故障状态，0表示无故障
+    position: Optional[int]  # 当前位置，0-4095对应0到满行程
+    velocity: Optional[int]  # 当前速度，-2048~2047单位0.001行程/s
+    current: Optional[int]   # 当前电流，-2048~2047单位0.001A
+    
     def print(self):
-        print(f"电机ID: {self.motor_id}, 指令: {self.instruction}, 位置: {self.position}, 速度: {self.velocity}, 电流: {self.current}")
+        print(f"电机ID: {self.motor_id}, 指令: {self.instruction}, 状态: {self.status}, 位置: {self.position}, 速度: {self.velocity}, 电流: {self.current}")
 
 class CommunicationInterface(ABC):
     """通信接口抽象基类"""
@@ -117,7 +119,7 @@ class CommunicationInterface(ABC):
         pass
     
     @abstractmethod
-    def send_and_receive(self, message: RuiyanHandControlMessage) -> RuiyanHandStatusMessage:
+    def send_and_receive(self, message: RuiyanHandControlMessage) -> bytes:
         """发送消息并接收响应"""
         pass
 
@@ -125,7 +127,7 @@ class CommunicationInterface(ABC):
 class SerialInterface(CommunicationInterface):
     """RS485通信接口实现"""
     
-    def __init__(self, port: str , baudrate: int ,timeout: float = 0.006, auto_connect: bool = False, mock:bool=False): #6ms is the fastes speed
+    def __init__(self, port: str , baudrate: int ,timeout: float = 0.01, auto_connect: bool = False, mock:bool=False): #6ms is the fastes speed
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -247,11 +249,16 @@ class SerialInterface(CommunicationInterface):
     def send_and_receive(self, message: RuiyanHandControlMessage) -> bytes:
         """发送消息并接收响应"""
         if not self._send_message(message):
-            return {}
+            return b''  # 返回空字节而不是空字典
         
         # 接收响应
         if(self.mock == True):
             logger.debug("Mock模式，无需接收数据")
-            return {}
+            # 在mock模式下返回模拟的响应数据
+            mock_response = struct.pack('<5B 8B', 
+                                      0xA5, message.motor_id, 0x00, 0x08, message.instruction,
+                                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+            return mock_response
         response = self._receive_message()
-        return response
+        return response if response is not None else b''
+

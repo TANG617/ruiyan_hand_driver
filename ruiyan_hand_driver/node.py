@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 class RuiyanHandNode(Node):
-    def __init__(self, left_hand:Optional[RuiyanHandController], right_hand: Optional[RuiyanHandController], topic_prefix:str="ruiyan", frequency:int=100):
+    def __init__(self, left_hand:Optional[RuiyanHandController], right_hand: Optional[RuiyanHandController], topic_prefix:str="ruiyan", frequency:int=50):
         rclpy.init()
         super().__init__("ruiyan_hand_node")
         self.topic_prefix = topic_prefix
