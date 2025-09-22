@@ -4,6 +4,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from .controller import RuiyanHandController, RuiyanHandInstructionType
 
+
+logger = logging.getLogger(__name__)
 class RuiyanHandNode(Node):
     def __init__(self, left_hand:Optional[RuiyanHandController], right_hand: Optional[RuiyanHandController], topic_prefix:str="ruiyan", frequency:int=100):
         self.topic_prefix = topic_prefix
