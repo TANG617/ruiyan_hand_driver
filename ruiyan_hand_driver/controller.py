@@ -75,7 +75,6 @@ class RuiyanHandController:
             status_list.append(
                 self._set_motor(
                     motor_id=motor_id,
-                    instruction=self.instruction,
                     position=self.position_list[index],
                     velocity=self.velocity_list[index],
                     current=self.current_list[index]))
@@ -103,5 +102,6 @@ class RuiyanHandController:
                 current=current
                 )
                 logger.info(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, 位置: {response_message.position}, 速度: {response_message.velocity}, 电流: {response_message.current}")
+                return response_message
         
 
