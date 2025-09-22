@@ -92,14 +92,7 @@ class RuiyanHandController:
             uint64_t I:12;        // 当前电流，-2048~2047单位0.001A
         }MFingerInfo_t;
         """
-        # 验证输入数据类型和长度
-        if not isinstance(raw_bytes, bytes):
-            logger.error(f"接收数据类型错误: 期望bytes, 收到{type(raw_bytes)}")
-            return None
-            
-        if len(raw_bytes) < 13:  # 至少需要帧头(5字节)+数据部分(8字节)
-            logger.error(f"接收数据长度不足: 需要至少13字节，实际{len(raw_bytes)}字节")
-            return None
+
             
         # 解析帧头部分: [0xA5][motor_id][0x00][data_len][instruction]
         header_data = struct.unpack('<5B', raw_bytes[:5])
@@ -112,7 +105,7 @@ class RuiyanHandController:
         finger_data = raw_bytes[5:13]  # 取8字节数据
         
         # 按小端序解析为64位整数
-        data_uint64 = struct.unpack('<Q', finger_data)[0]
+        data_uint64 = struct.unpack('>Q', finger_data)[0]
         
         # 按位解析各个字段
         cmd = (data_uint64 >> 0) & 0xFF        # 最低8位
