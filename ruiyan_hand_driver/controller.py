@@ -95,20 +95,19 @@ class RuiyanHandController:
 
             
         # 解析帧头部分: [0xA5][motor_id][0x00][data_len][instruction]
-        header_data = struct.unpack('<5B', raw_bytes[:5])
-        header, motor_id, _, data_length, instruction = header_data
+        header, motor_id, _, data_length = struct.unpack('<4B', raw_bytes[:4])
         
         if header != 0xA5:
             logger.error(f"帧头错误: 期望0xA5, 收到0x{header:02X}")
             return None
         
-        finger_data = raw_bytes[5:13]  # 取8字节数据
+        finger_data = raw_bytes[4:12]  # 取8字节数据
         
         # 按小端序解析为64位整数
-        data_uint64 = struct.unpack('>Q', finger_data)[0]
+        data_uint64 = struct.unpack('<Q', finger_data)[0]
         
         # 按位解析各个字段
-        cmd = (data_uint64 >> 0) & 0xFF        # 最低8位
+        instruction = (data_uint64 >> 0) & 0xFF        # 最低8位
         status = (data_uint64 >> 8) & 0xFF     # 第9-16位
         position = (data_uint64 >> 16) & 0xFFF # 第17-28位(12位)
         velocity = (data_uint64 >> 28) & 0xFFF # 第29-40位(12位)
@@ -133,7 +132,8 @@ class RuiyanHandController:
             status_desc = RuiyanHandStatusCode.get_description(status)
             logger.error(f"【错误】电机ID: {motor_id}, 状态码: {status}, 错误信息: {status_desc}")
         else:
-            logger.debug(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, "
+            if response_message.motor_id == 3:
+                logger.error(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, "
                         f"状态: {response_message.status}, 位置: {response_message.position}, "
                         f"速度: {response_message.velocity}, 电流: {response_message.current}")
                 
