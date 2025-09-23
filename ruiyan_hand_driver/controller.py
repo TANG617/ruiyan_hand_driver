@@ -110,7 +110,7 @@ class RuiyanHandController:
             logger.error(f"Error - Motor ID: {motor_id}, Status code: {status}, Error message: {status_desc}")
         else:
             if response_message.motor_id == 3:
-                logger.error(f"Received - Motor ID: {response_message.motor_id}, Instruction: {response_message.instruction}, "
+                logger.debug(f"Received - Motor ID: {response_message.motor_id}, Instruction: {response_message.instruction}, "
                         f"Status: {response_message.status}, Position: {response_message.position}, "
                         f"Velocity: {response_message.velocity}, Current: {response_message.current}")
                 

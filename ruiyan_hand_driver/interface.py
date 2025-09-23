@@ -157,7 +157,7 @@ class SerialInterface(CommunicationInterface):
     
     def _send_message(self, message: RuiyanHandControlMessage) -> bool:
         if not self.connected:
-            logger.error("RS485 serial port not connected")
+            logger.error("Serial port not connected")
             return False
 
         if self.mock == True:
@@ -183,7 +183,7 @@ class SerialInterface(CommunicationInterface):
             response = self.serial_controller.read(64)
             return response
         except Exception as e:
-            logger.error(f"RS485 message receive failed: {e}")
+            logger.error(f"Serial message receive failed: {e}")
             return None
     
     def _build_serial_frame(self, message: RuiyanHandControlMessage) -> bytes:
