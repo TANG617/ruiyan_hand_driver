@@ -21,7 +21,7 @@ import time
 from ruiyan_hand_driver.node import RuiyanHandNode
 
 
-interface = SerialInterface(port="/dev/ttyACM2", baudrate=115200, mock=False, auto_connect=True)
+interface = SerialInterface(port="/dev/ttyACM0", baudrate=115200, mock=False, auto_connect=True)
 controller = RuiyanHandController(communication_interface=interface,motors_id=[1,2,3,4,5,6], instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT)
 node = RuiyanHandNode(left_hand=controller,right_hand=None)
 rclpy.spin(node)
