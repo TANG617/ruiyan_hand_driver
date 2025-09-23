@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Dexhand控制器模块
-根据API函数封装对应的DexhandMessage数组，传递给communication_interface
-"""
 
 from dis import Instruction
 from readline import insert_text
@@ -17,7 +13,6 @@ from .interface import RuiyanHandControlMessage, CommunicationInterface, RuiyanH
 logger = logging.getLogger(__name__)
 
 class RuiyanHandController:
-    """Dexhand控制器，封装所有API函数"""
     
     
     def __init__(self, communication_interface:CommunicationInterface, motors_id:[int], instruction:RuiyanHandInstructionType = None):
@@ -35,20 +30,16 @@ class RuiyanHandController:
         }
     
     def connect(self) -> bool:
-        """连接通信接口"""
         return self.communication_interface.connect()
     
     def disconnect(self):
-        """断开通信接口"""
         return self.communication_interface.disconnect()
     
     def is_connected(self) -> bool:
-        """检查连接状态"""
         return self.communication_interface.is_connected()
 
     
     def _validate_motor_ids(self, motor_ids: List[int]) -> bool:
-        """验证电机ID列表"""
         for motor_id in motor_ids:
             if motor_id not in self.motor_ids:
                 return False
@@ -56,7 +47,7 @@ class RuiyanHandController:
 
     def _set_motor(self, motor_id:int, position:Optional[int], velocity:Optional[int], current:Optional[int]) -> RuiyanHandStatusMessage:
         request_message = RuiyanHandControlMessage(motor_id=motor_id,instruction=self.instruction,position=position,velocity=velocity,current=current)
-        logger.debug(f"【发送】电机ID: {request_message.motor_id}, 指令: {request_message.instruction}, 位置: {request_message.position}, 速度: {request_message.velocity}, 电流: {request_message.current}")
+        logger.debug(f"Motor ID: {request_message.motor_id}, Instruction: {request_message.instruction}, Position: {request_message.position}, Velocity: {request_message.velocity}, Current: {request_message.current}")
         status = self._parse_response(self.communication_interface.send_and_receive(message=request_message))
         return status
 
@@ -82,42 +73,28 @@ class RuiyanHandController:
 
 
     def _parse_response(self, raw_bytes: bytes) -> RuiyanHandStatusMessage:
-        """
-        按照新协议解析响应数据:
-        typedef struct {
-            uint64_t :8;          // CMD (前面的命令字)
-            uint64_t status:8;    // 故障状态，0表示无故障
-            uint64_t P:12;        // 当前位置，0-4095对应0到满行程
-            uint64_t V:12;        // 当前速度，-2048~2047单位0.001行程/s
-            uint64_t I:12;        // 当前电流，-2048~2047单位0.001A
-        }MFingerInfo_t;
-        """
 
             
-        # 解析帧头部分: [0xA5][motor_id][0x00][data_len][instruction]
         header, motor_id, _, data_length = struct.unpack('<4B', raw_bytes[:4])
         
         if header != 0xA5:
-            logger.error(f"帧头错误: 期望0xA5, 收到0x{header:02X}")
+            logger.error(f"Header error: expected 0xA5, received 0x{header:02X}")
             return None
         
-        finger_data = raw_bytes[4:12]  # 取8字节数据
+        finger_data = raw_bytes[4:12]
         
-        # 按小端序解析为64位整数
         data_uint64 = struct.unpack('<Q', finger_data)[0]
         
-        # 按位解析各个字段
-        instruction = (data_uint64 >> 0) & 0xFF        # 最低8位
-        status = (data_uint64 >> 8) & 0xFF     # 第9-16位
-        position = (data_uint64 >> 16) & 0xFFF # 第17-28位(12位)
-        velocity = (data_uint64 >> 28) & 0xFFF # 第29-40位(12位)
-        current = (data_uint64 >> 40) & 0xFFF  # 第41-52位(12位)
+        instruction = (data_uint64 >> 0) & 0xFF
+        status = (data_uint64 >> 8) & 0xFF
+        position = (data_uint64 >> 16) & 0xFFF
+        velocity = (data_uint64 >> 28) & 0xFFF
+        current = (data_uint64 >> 40) & 0xFFF
         
-        # 将12位有符号数转换为Python int (速度和电流是有符号的)
-        if velocity & 0x800:  # 检查符号位(第12位)
-            velocity = velocity - 0x1000  # 转换为负数
-        if current & 0x800:   # 检查符号位(第12位)
-            current = current - 0x1000   # 转换为负数
+        if velocity & 0x800:
+            velocity = velocity - 0x1000
+        if current & 0x800:
+            current = current - 0x1000
             
         response_message = RuiyanHandStatusMessage(
             motor_id=motor_id,
@@ -130,12 +107,12 @@ class RuiyanHandController:
 
         if status != 0:
             status_desc = RuiyanHandStatusCode.get_description(status)
-            logger.error(f"【错误】电机ID: {motor_id}, 状态码: {status}, 错误信息: {status_desc}")
+            logger.error(f"Error - Motor ID: {motor_id}, Status code: {status}, Error message: {status_desc}")
         else:
             if response_message.motor_id == 3:
-                logger.error(f"【接收】电机ID: {response_message.motor_id}, 指令: {response_message.instruction}, "
-                        f"状态: {response_message.status}, 位置: {response_message.position}, "
-                        f"速度: {response_message.velocity}, 电流: {response_message.current}")
+                logger.error(f"Received - Motor ID: {response_message.motor_id}, Instruction: {response_message.instruction}, "
+                        f"Status: {response_message.status}, Position: {response_message.position}, "
+                        f"Velocity: {response_message.velocity}, Current: {response_message.current}")
                 
         return response_message
         

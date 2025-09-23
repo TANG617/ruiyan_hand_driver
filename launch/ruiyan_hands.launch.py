@@ -7,44 +7,42 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        # 声明启动参数
         DeclareLaunchArgument(
             'left_rs485_port',
             default_value='/dev/ttyACM0',
-            description='左手RS485串口端口'
+            description='Left hand RS485 serial port'
         ),
         DeclareLaunchArgument(
             'left_rs485_baudrate',
             default_value='115200',
-            description='左手RS485波特率'
+            description='Left hand RS485 baudrate'
         ),
         DeclareLaunchArgument(
             'left_motor_ids',
             default_value='[1,2,3,4,5,6]',
-            description='左手电机ID列表'
+            description='Left hand motor ID list'
         ),
         DeclareLaunchArgument(
             'right_rs485_port',
             default_value='/dev/ttyACM1',
-            description='右手RS485串口端口'
+            description='Right hand RS485 serial port'
         ),
         DeclareLaunchArgument(
             'right_rs485_baudrate',
             default_value='115200',
-            description='右手RS485波特率'
+            description='Right hand RS485 baudrate'
         ),
         DeclareLaunchArgument(
             'right_motor_ids',
             default_value='[1,2,3,4,5,6]',
-            description='右手电机ID列表'
+            description='Right hand motor ID list'
         ),
         DeclareLaunchArgument(
             'control_rate',
             default_value='100.0',
-            description='控制频率(Hz)'
+            description='Control frequency (Hz)'
         ),
         
-        # 启动瑞眼灵巧手控制节点
         Node(
             package='ruiyan_hand_driver',
             executable='ruiyan_hand_node',

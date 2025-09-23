@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-瑞眼灵巧手USB端口启动文件
-使用USB端口而不是ACM端口
-"""
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -10,10 +6,9 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    # 声明启动参数
     left_port_arg = DeclareLaunchArgument(
         'left_rs485_port',
-        default_value='/dev/ttyUSB0',  # 使用USB端口
+        default_value='/dev/ttyUSB0',
         description='RS485 serial port for the left hand'
     )
     left_baudrate_arg = DeclareLaunchArgument(
@@ -29,7 +24,7 @@ def generate_launch_description():
 
     right_port_arg = DeclareLaunchArgument(
         'right_rs485_port',
-        default_value='/dev/ttyUSB1',  # 使用USB端口
+        default_value='/dev/ttyUSB1',
         description='RS485 serial port for the right hand'
     )
     right_baudrate_arg = DeclareLaunchArgument(

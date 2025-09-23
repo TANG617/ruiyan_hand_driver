@@ -122,7 +122,7 @@ def main():
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        logger.info("节点已手动停止")
+        logger.info("Node manually stopped")
     finally:
         node.destroy_node()
         rclpy.shutdown()

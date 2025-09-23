@@ -19,9 +19,6 @@ import time
 
 interface = SerialInterface(port="/dev/ttyACM0", baudrate=115200, mock=False,auto_connect=True)
 controller = RuiyanHandController(interface,motors_id=[1,2,3,4,5,6],instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT)
-# interface.connect()
-# interface.send_message(message=message)
-# controller.connect()
 
 while 1:
     position_list = [0,0,3840,3840,3840,3840]
@@ -33,7 +30,6 @@ while 1:
     for response in responses:
         response.print()
 
-    # response = bytearray([0xA5, 0x02, 0x01, 0x08, 0xAA, 0x00, 0xE7, 0x03, 0x00, 0x04, 0x00, 0x00, 0x48])
     
     position_list = [0, 0, 0, 0, 0, 0]
     velocity_list = [1000, 1000, 1000, 1000, 1000, 1000]
@@ -43,6 +39,5 @@ while 1:
     time.sleep(1)
     for response in responses:
         response.print()
-# print(controller._parse_response(response))
 
 
