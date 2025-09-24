@@ -3,7 +3,7 @@
 <package format="3">
   <name>ruiyan_hand_driver</name>
   <version>1.0.0</version>
-  <description>ROS2 driver for Ruiyan dexterous hand with RS485 communication</description>
+  <description>ROS2 driver for Ruiyan dexterous hand with serial communication</description>
   <maintainer email="litang0617@outlook.com">LiTang</maintainer>
   <license>MIT</license>
 

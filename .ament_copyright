@@ -1,0 +1,11 @@
+# ament_copyright configuration
+# This file configures the copyright checker for this package
+
+# License identifier
+license: MIT
+
+# Copyright holder
+copyright_holder: PSI Robot Team
+
+# Copyright year
+copyright_year: 2025
