@@ -38,7 +38,7 @@ class TestRuiyanHandController(unittest.TestCase):
         self.controller = RuiyanHandController(
             self.interface,
             motors_id=[1, 2, 3, 4, 5, 6],
-            instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT, # noqa
+            instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT,  # noqa
         )
 
     def test_controller_initialization(self):

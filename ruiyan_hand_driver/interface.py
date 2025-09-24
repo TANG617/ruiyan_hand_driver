@@ -196,7 +196,7 @@ class SerialInterface(CommunicationInterface):
             logger.debug(
                 f"Send - Motor ID: {message.motor_id}, "
                 f"Instruction: {hex(message.instruction)}, "
-                f"Frame data: {' '.join([f'{byte:02X}' for byte in serial_frame])}" # noqa E999
+                f"Frame data: {' '.join([f'{byte:02X}' for byte in serial_frame])}"  # noqa E999
             )
             return True
 
@@ -206,7 +206,7 @@ class SerialInterface(CommunicationInterface):
             logger.debug(
                 f"Send - Motor ID: {message.motor_id}, "
                 f"Instruction: {hex(message.instruction)}, "
-                f"Frame data: {' '.join([f'{byte:02X}' for byte in serial_frame])}" # noqa
+                f"Frame data: {' '.join([f'{byte:02X}' for byte in serial_frame])}"  # noqa
             )
             return True
         except Exception as e:

@@ -45,7 +45,7 @@ class TestRuiyanHandNode(unittest.TestCase):
         self.controller = RuiyanHandController(
             communication_interface=self.interface,
             motors_id=[1, 2, 3, 4, 5, 6],
-            instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT, # noqa
+            instruction=RuiyanHandInstructionType.CTRL_MOTOR_POSITION_VELOCITY_CURRENT,  # noqa
         )
         self.node = RuiyanHandNode(left_hand=self.controller, right_hand=None)
 
