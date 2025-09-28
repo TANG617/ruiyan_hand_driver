@@ -98,17 +98,22 @@ class RuiyanHandController:
     def loop(self) -> List[RuiyanHandStatusMessage]:
         status_list = []
         for index, motor_id in enumerate(self.motor_ids):
-            status_list.append(
-                self._set_motor(
-                    motor_id=motor_id,
-                    position=self.position_list[index],
-                    velocity=self.velocity_list[index],
-                    current=self.current_list[index],
-                )
+            status = self._set_motor(
+                motor_id=motor_id,
+                position=self.position_list[index],
+                velocity=self.velocity_list[index],
+                current=self.current_list[index],
             )
+            # 只添加有效的状态消息，跳过None值
+            if status is not None:
+                status_list.append(status)
         return status_list
 
     def _parse_response(self, raw_bytes: bytes) -> RuiyanHandStatusMessage:
+        # 检查数据长度是否足够
+        if len(raw_bytes) < 4:
+            logger.warning(f"Received insufficient data: {len(raw_bytes)} bytes, expected at least 4")
+            return None
 
         header, motor_id, _, data_length = struct.unpack("<4B", raw_bytes[:4])
 

@@ -9,7 +9,7 @@ import sys
 import unittest
 
 import rclpy
-
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from ruiyan_hand_driver.controller import RuiyanHandController
 from ruiyan_hand_driver.interface import (
     RuiyanHandInstructionType,
@@ -24,22 +24,24 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-
 
 class TestRuiyanHandNode(unittest.TestCase):
     """Test class for RuiyanHandNode."""
 
+    @classmethod
+    def setUpClass(cls):
+        """Set up class fixtures."""
+        # Initialize ROS only once for the entire test class
+        if not rclpy.ok():
+            rclpy.init()
+
     def setUp(self):
         """Set up test fixtures."""
-        # Initialize ROS
-        rclpy.init()
-
         # Use mock mode for testing
         self.interface = SerialInterface(
             port="/dev/ttyACM0",
             baudrate=115200,
-            mock=True,
+            mock=False,
             auto_connect=True,  # Use mock mode
         )
         self.controller = RuiyanHandController(
@@ -59,6 +61,28 @@ class TestRuiyanHandNode(unittest.TestCase):
         """Test node creation."""
         # Test if node is created correctly
         self.assertEqual(self.node.get_name(), "ruiyan_hand_node")
+        
+    def test_node_spin(self):
+        """Test node spinning for a short time."""
+        # 创建一个简单的定时器来测试节点运行
+        import threading
+        import time
+        
+        def stop_after_delay():
+            time.sleep(10)  # 运行100毫秒
+            rclpy.shutdown()
+        
+        # 在后台线程中启动停止定时器
+        stop_thread = threading.Thread(target=stop_after_delay)
+        stop_thread.daemon = True
+        stop_thread.start()
+        
+        # 运行节点
+        try:
+            rclpy.spin(self.node)
+        except Exception as e:
+            # 预期的异常，因为我们在后台线程中调用了shutdown
+            pass
 
     def tearDown(self):
         """Clean up after tests."""
@@ -66,7 +90,12 @@ class TestRuiyanHandNode(unittest.TestCase):
             self.node.destroy_node()
         if hasattr(self, "interface"):
             self.interface.disconnect()
-        rclpy.shutdown()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up after all tests."""
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ class TestRuiyanHandController(unittest.TestCase):
         self.interface = SerialInterface(
             port="/dev/ttyACM0",
             baudrate=115200,
-            mock=True,
+            mock=False,
             auto_connect=True,  # Use mock mode
         )
         self.controller = RuiyanHandController(

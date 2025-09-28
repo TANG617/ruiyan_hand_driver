@@ -4,7 +4,7 @@
 import logging
 import os
 import sys
-
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from ruiyan_hand_driver.interface import (
     RuiyanHandControlMessage,
     RuiyanHandInstructionType,
@@ -17,7 +17,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 
 message = RuiyanHandControlMessage(

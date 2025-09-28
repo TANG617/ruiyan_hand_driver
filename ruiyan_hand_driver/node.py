@@ -13,6 +13,12 @@ from std_msgs.msg import Header
 from .controller import RuiyanHandController, RuiyanHandInstructionType
 from .interface import RuiyanHandStatusMessage, SerialInterface
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,17 +32,17 @@ class RuiyanHandNode(Node):
     ):
         super().__init__("ruiyan_hand_node")
 
-        self.declare_parameter("topic_prefix", "ruiyan")
+        self.declare_parameter("topic_prefix", "ruiyan_hand")
         self.declare_parameter("frequency", 100)
         self.declare_parameter("left_port", "/dev/ttyACM0")
         self.declare_parameter("right_port", "/dev/ttyACM1")
         self.declare_parameter("baudrate", 115200)
         self.declare_parameter("auto_connect", True)
-        self.declare_parameter("left_motors_id", "[1,2,3,4,5,6]")
-        self.declare_parameter("right_motors_id", "[1,2,3,4,5,6]")
+        self.declare_parameter("left_motors_id", [1, 2, 3, 4, 5, 6])
+        self.declare_parameter("right_motors_id", [1, 2, 3, 4, 5, 6])
         self.declare_parameter("instruction_type", "0xAA")
         self.declare_parameter("enable_left_hand", True)
-        self.declare_parameter("enable_right_hand", True)
+        self.declare_parameter("enable_right_hand", False)
 
         self.topic_prefix = (
             self.get_parameter("topic_prefix")
@@ -58,15 +64,15 @@ class RuiyanHandNode(Node):
         auto_connect = (
             self.get_parameter("auto_connect").get_parameter_value().bool_value
         )
-        left_motors_id_str = (
+        left_motors_id = (
             self.get_parameter("left_motors_id")
             .get_parameter_value()
-            .string_value
+            .integer_array_value
         )
-        right_motors_id_str = (
+        right_motors_id = (
             self.get_parameter("right_motors_id")
             .get_parameter_value()
-            .string_value
+            .integer_array_value
         )
         instruction_type_str = (
             self.get_parameter("instruction_type")
@@ -84,8 +90,7 @@ class RuiyanHandNode(Node):
             .bool_value
         )
 
-        left_motors_id = json.loads(left_motors_id_str)
-        right_motors_id = json.loads(right_motors_id_str)
+        # left_motors_id 和 right_motors_id 已经是整数数组，无需JSON解析
 
         instruction_type = int(instruction_type_str, 16)
 
@@ -181,7 +186,9 @@ class RuiyanHandNode(Node):
         velocities = []
         efforts = []
 
-        sorted_status = sorted(status_list, key=lambda x: x.motor_id)
+        # 过滤掉None值并排序
+        valid_status_list = [status for status in status_list if status is not None]
+        sorted_status = sorted(valid_status_list, key=lambda x: x.motor_id)
 
         for status in sorted_status:
             joint_names.append(f"{hand_type}_hand_joint_{status.motor_id}")
@@ -220,6 +227,7 @@ class RuiyanHandNode(Node):
 
 
 def main(args=None):
+    
     rclpy.init(args=args)
     node = RuiyanHandNode()
     try:

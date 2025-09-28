@@ -48,18 +48,18 @@ def generate_launch_description():
     left_motors_id_arg = DeclareLaunchArgument(
         "left_motors_id",
         default_value="[1,2,3,4,5,6]",
-        description="Left hand motor ID list (JSON format)",
+        description="Left hand motor ID list",
     )
 
     right_motors_id_arg = DeclareLaunchArgument(
         "right_motors_id",
         default_value="[1,2,3,4,5,6]",
-        description="Right hand motor ID list (JSON format)",
+        description="Right hand motor ID list",
     )
 
     instruction_type_arg = DeclareLaunchArgument(
         "instruction_type",
-        default_value="0xAA",
+        default_value="\"0xAA\"",
         description="Control instruction type \
             (0xA0=read info, \
             0xAA=position velocity current control, \
@@ -74,7 +74,7 @@ def generate_launch_description():
 
     enable_right_hand_arg = DeclareLaunchArgument(
         "enable_right_hand",
-        default_value="true",
+        default_value="false",
         description="Whether to enable right hand",
     )
 
