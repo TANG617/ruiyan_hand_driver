@@ -1,10 +1,15 @@
+# Copyright (c) 2025 PSI Robot Team
+# Licensed under the Apache License, Version 2.0
+
 import rclpy
 from rclpy.node import Node
+
 
 class MinimalNode(Node):
     def __init__(self):
         super().__init__("minimal_node")
         self.get_logger().info("Hello from ROS2 Node!")
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -12,6 +17,7 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
